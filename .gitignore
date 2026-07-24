@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+
+# Build / cache
+dist/
+build/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
