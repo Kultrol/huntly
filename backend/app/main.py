@@ -1,6 +1,13 @@
-def main():
-    print("Hello from backend!")
+from fastapi import FastAPI
+
+from app.api import company
+
+app = FastAPI()
 
 
-if __name__ == "__main__":
-    main()
+@app.get("/")
+def root():
+    return {"message": "Hello world! From backend."}
+
+
+app.include_router(company.router)
