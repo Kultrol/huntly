@@ -1,10 +1,9 @@
-import os
 from logging.config import fileConfig
 
-from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app.core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -17,11 +16,7 @@ if config.config_file_name is not None:
 
 # Use the same DB_URL as the app (from .env). Do not rely on the
 # placeholder sqlalchemy.url in alembic.ini.
-load_dotenv()
-db_url = os.getenv("DB_URL")
-if not db_url:
-    raise ValueError("Environment variable DB_URL not found.")
-config.set_main_option("sqlalchemy.url", db_url)
+config.set_main_option("sqlalchemy.url", settings.db_url)
 
 # Import Base and models so metadata includes all tables for autogenerate.
 from app.core.database import Base
