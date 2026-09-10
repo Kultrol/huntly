@@ -1,27 +1,34 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
+import { useState } from "react";
 
 function App() {
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="container mx-auto px-4 py-16">
-        <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Huntly
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Track your job applications in one place.
-          </p>
+  const products = [
+    { title: "Cabbage", id: 1 },
+    { title: "Garlic", id: 2 },
+    { title: "Apple", id: 3 },
+  ];
 
-          <div className="mt-8 flex justify-center gap-4">
-            <Button size="lg">New Application</Button>
-            <Button size="lg" variant="outline">
-              View Applications
-            </Button>
-          </div>
-        </div>
-      </div>
+  const listItems = products.map((product) => (
+    <li key={product.id} className="text-4xl text-red-600">
+      {product.title}
+    </li>
+  ));
+
+  return (
+    <div>
+      {listItems}
+      <MyButton />
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
+
+function MyButton() {
+  const [count, setCount] = useState(0);
+  function handleClick() {
+    setCount(count + 1);
+  }
+
+  return <button onClick={handleClick}>Clicked {count} times</button>;
+}

@@ -7,19 +7,29 @@ requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.18.5",
     "fastapi[standard]>=0.139.2",
-    "psycopg2>=2.9.12",
+    "psycopg>=3.3.5",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "sqlalchemy>=2.0.51",
     "uvicorn>=0.51.0",
 ]
 
+
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""
+
+
+[tool.fastapi]
+entrypoint = "app.main:app"
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
+
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.0",
 ]
-
-
-[tool.fastapi]
-entrypoint = "app.main:app"

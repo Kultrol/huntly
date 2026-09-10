@@ -13,7 +13,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.tsbuildinfo
-*.alembic.ini
+alembic.ini
 
 # Env & secrets
 .env
