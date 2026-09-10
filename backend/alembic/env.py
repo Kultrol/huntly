@@ -16,7 +16,7 @@ if config.config_file_name is not None:
 
 # Use the same DB_URL as the app (from .env). Do not rely on the
 # placeholder sqlalchemy.url in alembic.ini.
-config.set_main_option("sqlalchemy.url", settings.db_url)
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Import Base and models so metadata includes all tables for autogenerate.
 from app.core.database import Base
