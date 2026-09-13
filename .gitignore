@@ -13,11 +13,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.tsbuildinfo
-alembic.ini
+
 
 # Env & secrets
 .env
-.env.*
 
 # OS / editor
 .DS_Store

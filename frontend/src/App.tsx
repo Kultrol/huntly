@@ -1,34 +1,43 @@
-import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getHealth } from "./api/health";
 
 function App() {
-  const products = [
-    { title: "Cabbage", id: 1 },
-    { title: "Garlic", id: 2 },
-    { title: "Apple", id: 3 },
-  ];
+  type BackendStatus = "loading" | "success" | "error";
 
-  const listItems = products.map((product) => (
-    <li key={product.id} className="text-4xl text-red-600">
-      {product.title}
-    </li>
-  ));
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
 
-  return (
-    <div>
-      {listItems}
-      <MyButton />
-    </div>
-  );
+  async function backendHealthStatusUpdater() {
+    try {
+      await getHealth();
+      setBackendStatus("success");
+    } catch {
+      setBackendStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    backendHealthStatusUpdater();
+  }, []);
+
+  if (backendStatus === "loading") {
+    return (
+      <div>
+        <p>Backend Status: Checking...</p>
+      </div>
+    );
+  } else if (backendStatus === "success") {
+    return (
+      <div>
+        <p>Backend Status: Online</p>
+      </div>
+    );
+  } else {
+    return (
+      <div>
+        <p>Backend Status: Offline</p>
+      </div>
+    );
+  }
 }
 
 export default App;
-
-function MyButton() {
-  const [count, setCount] = useState(0);
-  function handleClick() {
-    setCount(count + 1);
-  }
-
-  return <button onClick={handleClick}>Clicked {count} times</button>;
-}

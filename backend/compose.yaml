@@ -43,10 +43,24 @@ services:
 
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${DATABASE_NAME}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
 
     volumes:
       - .:/app
       - /app/.venv
+
+  backend_test:
+    build: .
+    depends_on:
+      db_test:
+        condition: service_healthy
+
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_test:5432/${TEST_DATABASE_NAME}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+
+    command: >
+      sh -c " uv run alembic upgrade head && uv run pytest -v"
 
 volumes:
   postgres_data:
