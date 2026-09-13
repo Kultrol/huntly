@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+
+        env:
+          POSTGRES_DB: test-huntly-db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd="pg_isready -U postgres -d huntly_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/huntly_test
+      ALLOWED_ORIGINS: '["http://localhost:5173"]'
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          working-directory: backend
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install backend dependencies
+        run: uv sync --frozen
+
+      - name: Run database migrations
+        run: uv run alembic upgrade head
+
+      - name: Run backend tests
+        run: uv run pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    env:
+      VITE_API_URL: http://localhost:8000
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
