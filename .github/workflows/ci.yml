@@ -24,13 +24,13 @@ jobs:
           - 5432:5432
 
         options: >-
-          --health-cmd="pg_isready -U postgres -d huntly_test"
+          --health-cmd="pg_isready -U postgres -d test-huntly-db"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/huntly_test
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/test-huntly-db
       ALLOWED_ORIGINS: '["http://localhost:5173"]'
 
     defaults:
