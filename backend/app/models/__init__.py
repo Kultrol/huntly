@@ -1,30 +1,33 @@
-"""ORM models package for Huntly."""
+"""ORM models package for Huntly.
 
-# Re-export models + enums so callers can `from app.models import Company`.
-# Importing this package also registers all tables on Base.metadata (needed
-# by Alembic autogenerate).
-from app.models.application_status_history import ApplicationStatusHistory
+Importing this package registers all ORM models with Base.metadata.
+"""
+
 from app.models.company import Company
 from app.models.contact import Contact
-from app.models.enums import (
-    ApplicationStatus,
-    InterviewOutcome,
-    InterviewType,
-    JobType,
-    Priority,
+from app.models.tracked_role.event import TrackedRoleEvent
+from app.models.tracked_role.event_status_history import EventStatusHistory
+from app.models.tracked_role.role_contact_association import (
+    TrackedRoleContact,
+    TrackedRoleContactAssociation,
 )
-from app.models.interview import Interview
-from app.models.job_application import JobApplication
+from app.models.tracked_role.status_history import StatusHistory
+from app.models.tracked_role.tracked_role import TrackedRole
+from app.models.user import User
+
+Event = TrackedRoleEvent
+TrackedRoleStatusHistory = StatusHistory
 
 __all__ = [
-    "ApplicationStatus",
-    "ApplicationStatusHistory",
     "Company",
     "Contact",
-    "Interview",
-    "InterviewOutcome",
-    "InterviewType",
-    "JobApplication",
-    "JobType",
-    "Priority",
+    "Event",
+    "EventStatusHistory",
+    "StatusHistory",
+    "TrackedRole",
+    "TrackedRoleContact",
+    "TrackedRoleContactAssociation",
+    "TrackedRoleEvent",
+    "TrackedRoleStatusHistory",
+    "User",
 ]

@@ -14,19 +14,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use the same DB_URL as the app (from .env). Do not rely on the
+# Use the same DATABASE_URL as the app (from .env). Do not rely on the
 # placeholder sqlalchemy.url in alembic.ini.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 # Import Base and models so metadata includes all tables for autogenerate.
+import app.models  # noqa: F401
 from app.core.database import Base
-from app.models import (  # noqa: F401
-    ApplicationStatusHistory,
-    Company,
-    Contact,
-    Interview,
-    JobApplication,
-)
 
 target_metadata = Base.metadata
 
@@ -67,6 +61,23 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+
+    def migrate(connection) -> None:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_server_default=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+    # Migration tests supply a connection into their own temporary schema.
+    # Normal CLI commands still create a connection from DATABASE_URL below.
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        migrate(connection)
+        return
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -74,10 +85,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
-
-        with context.begin_transaction():
-            context.run_migrations()
+        migrate(connection)
 
 
 if context.is_offline_mode():

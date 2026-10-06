@@ -1,11 +1,21 @@
 from enum import StrEnum
 
-# Values stored in the DB are the *right-hand* strings (e.g. "full_time"),
-# not the member names (FULL_TIME). Models use values_callable so SQLAlchemy
-# persists those values into VARCHAR columns.
+from sqlalchemy import Enum as SQLAlchemyEnum
 
 
-class JobType(StrEnum):
+def enum_type(enum_class: type[StrEnum], name: str) -> SQLAlchemyEnum:
+    """Store canonical enum values and constrain them in the database."""
+    return SQLAlchemyEnum(
+        enum_class,
+        name=name,
+        values_callable=lambda members: [member.value for member in members],
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+    )
+
+
+class TrackedRoleType(StrEnum):
     """How the role is structured (full-time, contract, etc.)."""
 
     FULL_TIME = "full_time"
@@ -17,21 +27,17 @@ class JobType(StrEnum):
 
 
 class Priority(StrEnum):
-    """How important this application is to you in the tracker."""
+    """The user's perceived importance of a tracked opportunity."""
 
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class ApplicationStatus(StrEnum):
-    """Where an application sits in the hiring pipeline.
+class TrackedRoleStatus(StrEnum):
+    """The current lifecycle stage of a tracked opportunity."""
 
-    Status history rows record these over time; the "current" status is
-    usually the latest history row (or a denormalized field added later).
-    """
-
-    WISHLIST = "wishlist"  # Saved / interested, not submitted yet
+    SAVED = "saved"  # Saved / interested, not submitted yet
     APPLIED = "applied"  # Application submitted
     SCREENING = "screening"  # Recruiter or automated screen
     INTERVIEW = "interview"  # Active interview loop
@@ -41,23 +47,35 @@ class ApplicationStatus(StrEnum):
     WITHDRAWN = "withdrawn"  # You withdrew the application
 
 
-class InterviewType(StrEnum):
-    """Format / focus of a single interview event."""
+class EventStatus(StrEnum):
+    """Status of an event (scheduled, completed, cancelled, etc.)."""
 
-    PHONE = "phone"
-    VIDEO = "video"
-    ONSITE = "onsite"
-    TECHNICAL = "technical"
-    BEHAVIORAL = "behavioral"
-    PANEL = "panel"
-    OTHER = "other"
-
-
-class InterviewOutcome(StrEnum):
-    """Result of one interview (not the whole application)."""
-
-    PENDING = "pending"  # Scheduled or completed, no decision yet
-    PASSED = "passed"
-    FAILED = "failed"
+    PENDING = "pending"
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
-    NO_SHOW = "no_show"
+    MISSED = "missed"
+
+
+class EventType(StrEnum):
+    """The canonical kind of a dated activity or deadline."""
+
+    INTERVIEW = "interview"
+    RECRUITER_SCREEN = "recruiter_screen"
+    ASSESSMENT = "assessment"
+    FOLLOW_UP = "follow_up"
+    APPLICATION_DEADLINE = "application_deadline"
+    OFFER_DEADLINE = "offer_deadline"
+    NETWORKING = "networking"
+    CUSTOM = "custom"
+
+
+class RelationshipType(StrEnum):
+    """Type of relationship between a tracked role and a contact."""
+
+    RECRUITER = "recruiter"
+    HIRING_MANAGER = "hiring_manager"
+    INTERVIEWER = "interviewer"
+    REFERRAL = "referral"
+    TEAM_MEMBER = "team_member"
+    OTHER = "other"
