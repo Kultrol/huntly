@@ -106,7 +106,6 @@ class TrackedRole(TimestampMixin, Base):
         nullable=True,
     )
 
-    # --- Relationships ---
     user: Mapped[User] = relationship(back_populates="tracked_roles")
     company: Mapped[Company | None] = relationship(back_populates="tracked_roles")
     status_history: Mapped[list[StatusHistory]] = relationship(

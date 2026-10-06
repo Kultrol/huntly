@@ -21,7 +21,6 @@ class Contact(TimestampMixin, Base):
 
     __tablename__ = "contacts"
 
-    # --- identity ---
     id: Mapped[UUID] = mapped_column(
         Uuid,
         primary_key=True,
@@ -42,7 +41,6 @@ class Contact(TimestampMixin, Base):
         comment="FK to companies.id; company this person works at / represents",
     )
 
-    # --- contact details ---
     name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -74,8 +72,6 @@ class Contact(TimestampMixin, Base):
         comment="Free-form notes (last conversation, intro path, etc.)",
     )
 
-    # --- relationships ---
-    # Many contacts → one company. Matching side: Company.contacts
     company: Mapped[Company | None] = relationship(back_populates="contacts")
     role_associations: Mapped[list[TrackedRoleContact]] = relationship(
         back_populates="contact",

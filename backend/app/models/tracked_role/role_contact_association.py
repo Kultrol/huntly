@@ -49,5 +49,5 @@ class TrackedRoleContact(TimestampMixin, Base):
     )
 
 
-# Retain the earlier Python import name while exposing the domain entity name.
+# Keep the old import name working.
 TrackedRoleContactAssociation = TrackedRoleContact

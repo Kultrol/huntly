@@ -3,12 +3,8 @@
 Revision ID: 22017b5e84d4
 Revises: 6ba2d65b164c
 
-The inspected development database had no legacy records. This is deliberately
-an empty-schema migration: ownership, current statuses, and interview semantics
-cannot be recovered reliably from the old schema. Both directions lock and check
-all domain tables before DDL, and reject populated databases without losing data.
-The definitions below are frozen here; never import current ORM models into a
-historical revision.
+Requires empty tables because old records cannot be converted automatically.
+Upgrade and downgrade stop if any affected table contains data.
 """
 
 from collections.abc import Sequence
@@ -43,9 +39,7 @@ DOMAIN_TABLES = (
 
 
 def _require_empty(tables: tuple[str, ...], direction: str) -> None:
-    # PostgreSQL holds these locks until the migration transaction ends. A writer
-    # cannot add a row after our check but before a later DROP or ALTER statement.
-    # Table names and direction come only from the fixed constants in this file.
+    # Block new rows until the empty check and schema changes are finished.
     op.execute("LOCK TABLE " + ", ".join(tables) + " IN ACCESS EXCLUSIVE MODE")
     for table in tables:
         op.execute(
@@ -67,7 +61,7 @@ def upgrade() -> None:
     """Upgrade only when every affected domain table is empty."""
     _require_empty(LEGACY_TABLES, "upgrade")
 
-    # Step 1: remove empty legacy children before their parent table.
+    # Remove empty legacy children before their parent table.
     op.drop_index(
         op.f("ix_application_status_history_application_id"),
         table_name="application_status_history",
@@ -78,7 +72,7 @@ def upgrade() -> None:
     op.drop_index(op.f("ix_job_applications_company_id"), table_name="job_applications")
     op.drop_table("job_applications")
 
-    # Step 2: create the ownership table before adding owner foreign keys.
+    # Create the ownership table before adding owner foreign keys.
     op.create_table(
         "users",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -86,7 +80,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Step 3: replace global company uniqueness with owner/name uniqueness.
+    # Replace global company uniqueness with owner/name uniqueness.
     op.add_column("companies", sa.Column("user_id", sa.UUID(), nullable=False))
     op.add_column(
         "companies",
@@ -131,7 +125,7 @@ def upgrade() -> None:
         "fk_companies_user", "companies", "users", ["user_id"], ["id"]
     )
 
-    # Step 4: add contact ownership and preserve contacts when a company is deleted.
+    # Add contact ownership and preserve contacts when a company is deleted.
     op.add_column(
         "contacts",
         sa.Column("user_id", sa.UUID(), nullable=False, comment="FK to users.id"),
@@ -189,7 +183,7 @@ def upgrade() -> None:
         ondelete="SET NULL",
     )
 
-    # Step 5: create tracked roles, with explicit status and salary checks.
+    # Create tracked roles, with explicit status and salary checks.
     op.create_table(
         "tracked_roles",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -336,7 +330,7 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Step 6: create dependent histories, events, and contact associations.
+    # Create dependent histories, events, and contact associations.
     op.create_table(
         "status_history",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -591,7 +585,7 @@ def downgrade() -> None:
     """Downgrade only when every affected domain table is empty."""
     _require_empty(DOMAIN_TABLES, "downgrade")
 
-    # Step 1: remove empty V1 children before their parents.
+    # Remove empty V1 children before their parents.
     op.drop_table("event_status_histories")
     op.drop_table("tracked_role_events")
     op.drop_index(
@@ -607,7 +601,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_tracked_roles_company_id"), table_name="tracked_roles")
     op.drop_table("tracked_roles")
 
-    # Step 2: restore the old contact/company columns and constraints.
+    # Restore the old contact/company columns and constraints.
     op.drop_constraint("fk_contacts_company", "contacts", type_="foreignkey")
     op.drop_constraint("fk_contacts_user", "contacts", type_="foreignkey")
     op.create_foreign_key(
@@ -723,10 +717,10 @@ def downgrade() -> None:
     op.drop_column("companies", "normalized_name")
     op.drop_column("companies", "user_id")
 
-    # Step 3: remove the ownership table after all owner foreign keys.
+    # Remove the ownership table after all owner foreign keys.
     op.drop_table("users")
 
-    # Step 4: recreate empty legacy applications before their dependent tables.
+    # Recreate empty legacy applications before their dependent tables.
     op.create_table(
         "job_applications",
         sa.Column(

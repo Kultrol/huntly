@@ -10,8 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.core.database import Base
 from app.models.mixins import TimestampMixin
 
-# TYPE_CHECKING is True only for type checkers / IDEs. These imports are
-# not executed at runtime, which avoids circular imports between models.
+# Type-only imports avoid circular imports between models.
 if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.tracked_role.tracked_role import TrackedRole
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 class Company(TimestampMixin, Base):
     __tablename__ = "companies"
 
-    # --- identity ---
     id: Mapped[UUID] = mapped_column(
         SQL_UUID,
         primary_key=True,
@@ -62,13 +60,10 @@ class Company(TimestampMixin, Base):
         comment="Free-form notes about the company (culture, referrals, etc.)",
     )
 
-    # --- relationships ---
-    # One company → many tracked roles. Matching side: TrackedRole.company
     tracked_roles: Mapped[list[TrackedRole]] = relationship(
         back_populates="company", passive_deletes=True
     )
 
-    # One company → many people. Matching side: Contact.company
     contacts: Mapped[list[Contact]] = relationship(
         back_populates="company", passive_deletes=True
     )
@@ -91,6 +86,5 @@ class Company(TimestampMixin, Base):
 @event.listens_for(Company, "before_insert")
 @event.listens_for(Company, "before_update")
 def maintain_normalized_name(mapper, connection, company: Company) -> None:
-    # Derive the value again at persistence time so it cannot be overridden
-    # independently of the display name during an ORM write.
+    # Recompute normalized_name before saving, even if it was assigned directly.
     company.name = company.validate_name("name", company.name)

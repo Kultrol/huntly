@@ -69,9 +69,9 @@ separate Compose project `huntly-tests`. The test database is temporary and has
 no host port. Development data and running development containers are separate.
 The script returns the test process's exit status: zero means success.
 
-The tests cover API health, database connectivity, fresh migration installation,
-schema/model agreement, empty rollback, populated-data guards, and database
-constraints and deletion rules. Migration tests use their own temporary schemas.
+The three tests check API health, database connectivity, and the response when
+the database is unavailable. The test container applies migrations before running
+them. There are no dedicated migration tests yet.
 
 ## Bring the schema in line with the models
 

@@ -1,7 +1,4 @@
-"""ORM models package for Huntly.
-
-Importing this package registers all ORM models with Base.metadata.
-"""
+"""Import all models so Alembic can find their tables."""
 
 from app.models.company import Company
 from app.models.contact import Contact

@@ -94,7 +94,7 @@ class TrackedRoleEvent(Base, TimestampMixin):
 @event.listens_for(TrackedRoleEvent, "before_insert")
 @event.listens_for(TrackedRoleEvent, "before_update")
 def validate_custom_type(mapper, connection, target: TrackedRoleEvent) -> None:
-    # Check both fields together after assignment so updates are order-independent.
+    # Check both fields before saving so assignment order does not matter.
     if target.event_type == EventType.CUSTOM:
         if target.custom_type_name is None:
             raise ValueError("Custom events require a custom type name.")

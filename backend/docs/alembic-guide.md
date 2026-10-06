@@ -19,11 +19,6 @@ The new revision is
 and its `down_revision` is `6ba2d65b164c`. After applying it, `alembic current`
 should report `22017b5e84d4` as the head.
 
-Verification on October 1, 2026: this revision was applied to the development
-database. `current` reported `22017b5e84d4 (head)`, and `check` reported no new
-upgrade operations. All 14 tests passed in the separate Docker test project:
-11 migration cases and three API health cases.
-
 The new revision first locks and checks the old tables, then changes the schema
 only if they contain no records. Locking prevents another connection from
 inserting a record between the check and the replacement. A populated database
@@ -252,20 +247,17 @@ The project test command is:
 ./scripts/test.sh
 ```
 
-It uses a separate Compose project and a temporary PostgreSQL database. A fresh
-database test answers “Can the whole migration chain build the schema?” A test
-starting at the previous revision with representative records answers “Does
-this change preserve existing data?” Both matter when a migration supports
-populated databases. The alignment revision's populated-database test should
-instead prove that its guard refuses safely and leaves existing records intact.
+It uses a separate Compose project and a temporary PostgreSQL database. It applies
+the migrations to a fresh database, then runs the three health tests. There are
+no dedicated migration tests yet. These health tests do not check rollback,
+existing data, or database constraints.
 
 Practice downgrades only on a disposable database. `alembic downgrade -1` means
 undo the latest applied revision; it is not a backup restore. For an additive
 field migration, dropping the field also removes its values. This alignment
 revision deliberately refuses a downgrade when the new tables contain records.
-The rollback tests cover returning from this revision to `6ba2d65b164c` and
-upgrading again. They do not certify earlier historical downgrades; an older
-revision still contains an unnamed constraint drop, as noted in the README.
+An older revision contains an unnamed constraint drop, as noted in the README;
+review earlier revisions before attempting further downgrades.
 
 Once checks pass, restart the backend to use the updated schema. Keep the model
 change, reviewed revision, and relevant tests together in version control.
