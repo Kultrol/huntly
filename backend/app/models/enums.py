@@ -1,13 +1,21 @@
 from enum import StrEnum
 
-# Values stored in the DB are the *right-hand* strings (e.g. "full_time"),
-# not the member names (FULL_TIME). Models use values_callable so SQLAlchemy
-# persists those values into VARCHAR columns.
+from sqlalchemy import Enum as SQLAlchemyEnum
 
 
-class JobType(StrEnum):
-    """How the role is structured (full-time, contract, etc.)."""
+def enum_type(enum_class: type[StrEnum], name: str) -> SQLAlchemyEnum:
+    """Store enum values (e.g. full_time) and reject unlisted values."""
+    return SQLAlchemyEnum(
+        enum_class,
+        name=name,
+        values_callable=lambda members: [member.value for member in members],
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+    )
 
+
+class TrackedRoleType(StrEnum):
     FULL_TIME = "full_time"
     PART_TIME = "part_time"
     CONTRACT = "contract"
@@ -17,47 +25,45 @@ class JobType(StrEnum):
 
 
 class Priority(StrEnum):
-    """How important this application is to you in the tracker."""
-
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class ApplicationStatus(StrEnum):
-    """Where an application sits in the hiring pipeline.
-
-    Status history rows record these over time; the "current" status is
-    usually the latest history row (or a denormalized field added later).
-    """
-
-    WISHLIST = "wishlist"  # Saved / interested, not submitted yet
-    APPLIED = "applied"  # Application submitted
-    SCREENING = "screening"  # Recruiter or automated screen
-    INTERVIEW = "interview"  # Active interview loop
-    OFFER = "offer"  # Offer received
-    REJECTED = "rejected"  # Company passed (or you were rejected)
-    ACCEPTED = "accepted"  # You accepted an offer
-    WITHDRAWN = "withdrawn"  # You withdrew the application
+class TrackedRoleStatus(StrEnum):
+    SAVED = "saved"
+    APPLIED = "applied"
+    SCREENING = "screening"
+    INTERVIEW = "interview"
+    OFFER = "offer"
+    REJECTED = "rejected"
+    ACCEPTED = "accepted"
+    WITHDRAWN = "withdrawn"
 
 
-class InterviewType(StrEnum):
-    """Format / focus of a single interview event."""
-
-    PHONE = "phone"
-    VIDEO = "video"
-    ONSITE = "onsite"
-    TECHNICAL = "technical"
-    BEHAVIORAL = "behavioral"
-    PANEL = "panel"
-    OTHER = "other"
-
-
-class InterviewOutcome(StrEnum):
-    """Result of one interview (not the whole application)."""
-
-    PENDING = "pending"  # Scheduled or completed, no decision yet
-    PASSED = "passed"
-    FAILED = "failed"
+class EventStatus(StrEnum):
+    PENDING = "pending"
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
     CANCELLED = "cancelled"
-    NO_SHOW = "no_show"
+    MISSED = "missed"
+
+
+class EventType(StrEnum):
+    INTERVIEW = "interview"
+    RECRUITER_SCREEN = "recruiter_screen"
+    ASSESSMENT = "assessment"
+    FOLLOW_UP = "follow_up"
+    APPLICATION_DEADLINE = "application_deadline"
+    OFFER_DEADLINE = "offer_deadline"
+    NETWORKING = "networking"
+    CUSTOM = "custom"
+
+
+class RelationshipType(StrEnum):
+    RECRUITER = "recruiter"
+    HIRING_MANAGER = "hiring_manager"
+    INTERVIEWER = "interviewer"
+    REFERRAL = "referral"
+    TEAM_MEMBER = "team_member"
+    OTHER = "other"
