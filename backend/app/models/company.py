@@ -5,12 +5,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, event
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
 
 from app.core.database import Base
 from app.models.mixins import TimestampMixin
 
-# Type-only imports avoid circular imports between models.
 if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.tracked_role.tracked_role import TrackedRole
@@ -18,7 +18,21 @@ if TYPE_CHECKING:
 
 
 class Company(TimestampMixin, Base):
-    __tablename__ = "companies"
+    """A company record belonging to one user's private workspace.
+
+    Attributes:
+        name: Display name with repeated whitespace collapsed.
+        normalized_name: Case-folded display name used for user-scoped uniqueness.
+        tracked_roles: Opportunities whose company links are cleared on deletion.
+        contacts: People whose company links are cleared on deletion.
+
+    Notes:
+        Normalization handles formatting differences, not legal-name aliases.
+        Another user may independently store the same normalized company name.
+        The foreign key identifies the owner; authorization belongs to callers.
+    """
+
+    __tablename__: str = "companies"
 
     id: Mapped[UUID] = mapped_column(
         SQL_UUID,
@@ -70,21 +84,55 @@ class Company(TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="companies")
 
-    __table_args__ = (
+    __table_args__: tuple[UniqueConstraint, ...] = (
         UniqueConstraint("user_id", "normalized_name", name="uq_company_user_name"),
     )
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
+        """Normalize the display name and synchronize its duplicate-check key.
+
+        Args:
+            key: SQLAlchemy attribute name triggering validation.
+            value: Proposed company display name.
+
+        Returns:
+            The name with leading, trailing, and repeated whitespace removed.
+
+        Raises:
+            ValueError: If the value is not a string or contains only whitespace.
+
+        Notes:
+            Also updates ``normalized_name`` using Unicode case folding.
+            Punctuation and company suffixes remain significant for uniqueness.
+        """
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Company name must contain non-whitespace characters")
-        name = " ".join(value.split())
+        name: str = " ".join(value.split())
         self.normalized_name = name.casefold()
         return name
 
 
 @event.listens_for(Company, "before_insert")
 @event.listens_for(Company, "before_update")
-def maintain_normalized_name(mapper, connection, company: Company) -> None:
-    # Recompute normalized_name before saving, even if it was assigned directly.
+def maintain_normalized_name(
+    mapper: Mapper[Company], connection: Connection, company: Company
+) -> None:
+    """Restore the name-derived uniqueness key before an ORM write.
+
+    Args:
+        mapper: SQLAlchemy mapper supplied by the persistence event.
+        connection: Connection for the pending write; unused by this hook.
+        company: Company being inserted or updated.
+
+    Returns:
+        None. The company is normalized in place.
+
+    Raises:
+        ValueError: If the company's display name is invalid.
+
+    Notes:
+        Direct SQL writes bypass this ORM hook.
+    """
+    # A stale or manually assigned key could bypass user-scoped deduplication.
     company.name = company.validate_name("name", company.name)
