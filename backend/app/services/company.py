@@ -16,46 +16,23 @@ from app.services.exceptions.company import (
     CompanyNotFoundError,
     CompanyUpdateError,
 )
+from app.services.user import UserService
 
 
 class CompanyService:
-    """Manage companies and their per-user normalized-name uniqueness.
+    """Manage companies and per-owner normalized-name uniqueness.
 
-    Attributes:
-        db: Session shared with the caller's transaction.
-
-    Notes:
-        Mutations flush without committing. The caller must commit successful
-        work or roll back a failed transaction. ID-based methods do not check
-        ownership; the caller must authorize access to the requested company.
+    Mutations flush without committing; the caller owns commit and rollback. ID-based
+    operations do not authorize access.
     """
 
     def __init__(self, db: AsyncSession) -> None:
-        """Bind the service to an existing session.
-
-        Args:
-            db: Session whose transaction remains the caller's responsibility.
-
-        Returns:
-            None.
-
-        Raises:
-            None: Binding the session performs no database operation.
-        """
         self.db: AsyncSession = db
 
     async def get_company_by_id(self, id: UUID) -> Company:
-        """Fetch a company by identity without an owner filter.
+        """Fetch a company by ID without checking ownership.
 
-        Args:
-            id: Company identifier authorized by the caller.
-
-        Returns:
-            The company attached to this service's session.
-
-        Raises:
-            CompanyNotFoundError: No company exists with the supplied ID.
-            CompanyFetchingError: SQLAlchemy cannot load the company.
+        Raise CompanyNotFoundError if absent.
         """
         try:
             company: Company | None = await self.db.get(Company, id)
@@ -66,20 +43,14 @@ class CompanyService:
             raise CompanyFetchingError(f"Failed to get company: {id}") from exc
 
     async def get_all_companies(self, user_id: UUID | None = None) -> list[Company]:
-        """List companies, optionally limiting results to one owner.
+        """List companies ordered by name and ID, optionally filtered by an existing
+        owner.
 
-        Args:
-            user_id: Owner to filter by; None includes every user's companies.
-
-        Returns:
-            Companies ordered by display name and ID, or an empty list.
-
-        Raises:
-            CompanyFetchingError: SQLAlchemy cannot execute the query.
-
-        Notes:
-            Omitting the owner requires the caller to authorize global access.
+        Omitting user_id returns companies for all owners; the caller must authorize
+        that access.
         """
+        if user_id is not None:
+            await UserService(db=self.db).get_user(user_id)
         try:
             stmt: Select[tuple[Company]] = select(Company)
             if user_id is not None:
@@ -91,24 +62,12 @@ class CompanyService:
             raise CompanyFetchingError("Failed to get all companies") from exc
 
     async def create_company(self, new_company_data: CompanyCreate) -> Company:
-        """Create a company if its normalized name is unused by its owner.
+        """Create a company with a normalized name unique to an existing owner.
 
-        Args:
-            new_company_data: Validated company fields, including its owner.
-
-        Returns:
-            The new company after flushing it into the current transaction.
-
-        Raises:
-            CompanyAlreadyExistsError: The owner already has a company with
-                the same case-folded, whitespace-normalized name.
-            CompanyCreationError: SQLAlchemy cannot query or insert the company.
-
-        Notes:
-            The pre-check gives a domain error for known duplicates. A concurrent
-            insert can still violate the database's unique constraint and surface
-            as CompanyCreationError.
+        Known duplicates raise CompanyAlreadyExistsError. A concurrent insert can
+        violate the database constraint and raise CompanyCreationError instead.
         """
+        await UserService(db=self.db).get_user(new_company_data.user_id)
         try:
             normalized_name: str = " ".join(new_company_data.name.split()).casefold()
             existing_company: Company | None = await self.db.scalar(
@@ -130,24 +89,7 @@ class CompanyService:
             raise CompanyCreationError("Failed to create company") from exc
 
     async def delete_company(self, id: UUID) -> None:
-        """Delete a company while retaining its contacts and tracked roles.
-
-        Args:
-            id: Company identifier authorized by the caller.
-
-        Returns:
-            None. The deletion is flushed and still requires a caller commit.
-
-        Raises:
-            CompanyNotFoundError: No company exists with the supplied ID.
-            CompanyFetchingError: The initial company lookup fails.
-            CompanyDeletionError: SQLAlchemy cannot delete the company or flush
-                the deletion.
-
-        Notes:
-            Company foreign keys on retained contacts and roles become null;
-            deleting the organization does not erase the user's search records.
-        """
+        """Delete a company and clear company links on surviving contacts and roles."""
         company: Company = await self.get_company_by_id(id=id)
         try:
             await self.db.delete(company)
@@ -156,26 +98,11 @@ class CompanyService:
             raise CompanyDeletionError(f"Failed to delete company: {id}") from exc
 
     async def update_company(self, id: UUID, company_data: CompanyUpdate) -> Company:
-        """Apply supplied fields while preserving per-owner name uniqueness.
+        """Apply supplied changes while preserving per-owner name uniqueness.
 
-        Args:
-            id: Company identifier authorized by the caller.
-            company_data: Validated patch; omitted fields remain unchanged and
-                explicit null clears a nullable field.
-
-        Returns:
-            The updated company, flushed and refreshed in the current transaction.
-
-        Raises:
-            CompanyNotFoundError: No company exists with the supplied ID.
-            CompanyFetchingError: The initial company lookup fails.
-            CompanyAlreadyExistsError: Another company owned by the same user
-                already has the proposed normalized name.
-            CompanyUpdateError: SQLAlchemy cannot check, flush, or refresh changes.
-
-        Notes:
-            A concurrent rename can still fail the database's unique constraint
-            and surface as CompanyUpdateError rather than a duplicate-name error.
+        Omitted fields remain unchanged; explicit null clears nullable fields. Known
+        duplicate names raise CompanyAlreadyExistsError; a concurrent rename can raise
+        CompanyUpdateError instead.
         """
         company: Company = await self.get_company_by_id(id=id)
         try:
