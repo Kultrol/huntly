@@ -1,28 +1,34 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from alembic.config import Config
+from sqlalchemy import Connection, Engine, MetaData, engine_from_config, pool
+
 from app.core.config import settings
 
-config = context.config
+config: Config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use the app database URL instead of the placeholder in alembic.ini.
+# Alembic and the API must target the same database. Escape percent signs so
+# ConfigParser preserves URL-encoded credentials rather than interpolating them.
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
-# Register all model tables for autogenerate.
+# Autogenerate compares this registry with the database; unimported models would
+# be absent and could make existing tables appear to need deletion.
 import app.models  # noqa: F401
 from app.core.database import Base
 
-target_metadata = Base.metadata
+target_metadata: MetaData = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Generate migration SQL without connecting to the database."""
-    url = config.get_main_option("sqlalchemy.url")
+    """Emit migration SQL using the configured database dialect.
+
+    Data guards run when that SQL is executed, not during generation.
+    """
+    url: str | None = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -35,9 +41,14 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Apply migrations using a database connection."""
+    """Run revisions using a supplied connection or a new non-pooled connection.
 
-    def migrate(connection) -> None:
+    A supplied connection remains owned by its caller. Autogeneration compares
+    server defaults as well as table metadata.
+    """
+
+    def migrate(connection: Connection) -> None:
+        """Run revisions within Alembic's transaction context on this connection."""
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -46,13 +57,14 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
-    # Python callers can supply an existing connection.
-    connection = config.attributes.get("connection")
+    # Reusing a caller's connection lets migrations participate in its transaction
+    # rather than silently opening a second connection to the same database.
+    connection: Connection | None = config.attributes.get("connection")
     if connection is not None:
         migrate(connection)
         return
 
-    connectable = engine_from_config(
+    connectable: Engine = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
