@@ -1,11 +1,13 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from httpx2 import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core import database
+from app.main import app
 from app.models import Company, User
 
 pytestmark = pytest.mark.anyio
@@ -82,3 +84,25 @@ async def test_explicitly_loaded_relationships_remain_available_after_close(
         )
     assert user is not None
     assert [company.id for company in user.companies] == [saved_company.id]
+
+
+# A request using the production session can return updated user fields after committing them.
+async def test_production_session_can_serialize_response_after_commit(
+    sessions, owner_ids, monkeypatch
+):
+    production_factory = database.SessionLocal
+
+    def create_session():
+        return production_factory(bind=sessions.kw["bind"])
+
+    monkeypatch.setattr(database, "SessionLocal", create_session)
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.patch(f"/users/{owner_ids[0]}", json={"name": "Janet"})
+    assert response.status_code == 200
+    assert response.json() == {"id": str(owner_ids[0]), "name": "Janet"}
+    async with sessions() as session:
+        user = await session.get(User, owner_ids[0])
+        assert user is not None
+        assert user.name == "Janet"
