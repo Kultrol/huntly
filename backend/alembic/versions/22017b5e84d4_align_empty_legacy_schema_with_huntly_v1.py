@@ -10,23 +10,22 @@ Upgrade and downgrade stop if any affected table contains data.
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "22017b5e84d4"
 down_revision: str | Sequence[str] | None = "6ba2d65b164c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-LEGACY_TABLES = (
+LEGACY_TABLES: tuple[str, ...] = (
     "companies",
     "contacts",
     "job_applications",
     "application_status_history",
     "interviews",
 )
-DOMAIN_TABLES = (
+DOMAIN_TABLES: tuple[str, ...] = (
     "users",
     "companies",
     "contacts",
@@ -39,7 +38,13 @@ DOMAIN_TABLES = (
 
 
 def _require_empty(tables: tuple[str, ...], direction: str) -> None:
-    # Block new rows until the empty check and schema changes are finished.
+    """Lock the affected tables and refuse replacement if any contain rows.
+
+    Locks last for the surrounding transaction so inserts cannot race the guard.
+    Table names must come from the hard-coded migration lists.
+    """
+    # The check must remain valid until the schema changes finish; without these
+    # locks, another transaction could insert data after a table was found empty.
     op.execute("LOCK TABLE " + ", ".join(tables) + " IN ACCESS EXCLUSIVE MODE")
     for table in tables:
         op.execute(
@@ -58,10 +63,15 @@ def _require_empty(tables: tuple[str, ...], direction: str) -> None:
 
 
 def upgrade() -> None:
-    """Upgrade only when every affected domain table is empty."""
+    """Replace the legacy schema only when all affected tables are empty.
+
+    Legacy records lack V1 ownership and compatible role/event history. This
+    revision changes structure without inventing owners or converting records.
+    """
     _require_empty(LEGACY_TABLES, "upgrade")
 
-    # Remove empty legacy children before their parent table.
+    # History and interviews reference applications, so their foreign keys must
+    # disappear before the legacy application table can be removed.
     op.drop_index(
         op.f("ix_application_status_history_application_id"),
         table_name="application_status_history",
@@ -72,7 +82,8 @@ def upgrade() -> None:
     op.drop_index(op.f("ix_job_applications_company_id"), table_name="job_applications")
     op.drop_table("job_applications")
 
-    # Create the ownership table before adding owner foreign keys.
+    # V1 records require an owner; an empty schema lets us add that requirement
+    # without assigning existing records to an arbitrary user.
     op.create_table(
         "users",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -80,7 +91,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # Replace global company uniqueness with owner/name uniqueness.
+    # Separate users may track the same company; duplicates are defined by the
+    # normalized name within one user's workspace rather than across the app.
     op.add_column("companies", sa.Column("user_id", sa.UUID(), nullable=False))
     op.add_column(
         "companies",
@@ -125,7 +137,8 @@ def upgrade() -> None:
         "fk_companies_user", "companies", "users", ["user_id"], ["id"]
     )
 
-    # Add contact ownership and preserve contacts when a company is deleted.
+    # A contact remains useful after its company is removed, so company deletion
+    # clears the optional association instead of deleting the person's record.
     op.add_column(
         "contacts",
         sa.Column("user_id", sa.UUID(), nullable=False, comment="FK to users.id"),
@@ -183,7 +196,8 @@ def upgrade() -> None:
         ondelete="SET NULL",
     )
 
-    # Create tracked roles, with explicit status and salary checks.
+    # Roles can exist before an application. Requiring an explicit status avoids
+    # treating every saved opportunity as an already-submitted application.
     op.create_table(
         "tracked_roles",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -330,7 +344,8 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Create dependent histories, events, and contact associations.
+    # Events and histories inherit ownership through their parent role; the
+    # contact association records who helped with each individual opportunity.
     op.create_table(
         "status_history",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -582,10 +597,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade only when every affected domain table is empty."""
+    """Restore the legacy structure only when every V1 domain table is empty.
+
+    The legacy schema cannot represent V1 ownership or event history, so records
+    must be converted separately before a populated database can be downgraded.
+    """
     _require_empty(DOMAIN_TABLES, "downgrade")
 
-    # Remove empty V1 children before their parents.
+    # Parent rows own the history and association records; remove those dependent
+    # tables first so their foreign keys do not block the structural rollback.
     op.drop_table("event_status_histories")
     op.drop_table("tracked_role_events")
     op.drop_index(
@@ -601,7 +621,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_tracked_roles_company_id"), table_name="tracked_roles")
     op.drop_table("tracked_roles")
 
-    # Restore the old contact/company columns and constraints.
+    # The legacy schema requires a company for every contact and uses global
+    # uniqueness, which can be restored safely only after the empty-table guard.
     op.drop_constraint("fk_contacts_company", "contacts", type_="foreignkey")
     op.drop_constraint("fk_contacts_user", "contacts", type_="foreignkey")
     op.create_foreign_key(
@@ -717,10 +738,12 @@ def downgrade() -> None:
     op.drop_column("companies", "normalized_name")
     op.drop_column("companies", "user_id")
 
-    # Remove the ownership table after all owner foreign keys.
+    # The ownership table can be removed only after companies, contacts, and roles
+    # no longer reference it through foreign keys.
     op.drop_table("users")
 
-    # Recreate empty legacy applications before their dependent tables.
+    # Legacy history and interviews reference job applications, so their parent
+    # table must exist before those foreign keys are recreated.
     op.create_table(
         "job_applications",
         sa.Column(

@@ -5,23 +5,20 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class TimestampMixin:
-    """Shared audit columns mixed into every domain table.
+    """Storage timestamps, separate from when a job-search activity occurred.
 
-    Inherit first (or anywhere before Base is fine with SQLAlchemy 2.0
-    declarative) so models get created_at / updated_at for free.
+    The database supplies initial values. SQLAlchemy updates ``updated_at`` on
+    writes, but raw SQL does not refresh it automatically.
     """
 
-    # --- audit timestamps (timezone-aware) ---
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        # Postgres sets this on INSERT if the app does not pass a value.
         server_default=func.now(),
         nullable=False,
         comment="When this row was first created (DB server default, timezone-aware)",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        # server_default covers the first insert; onupdate covers later ORM writes.
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,

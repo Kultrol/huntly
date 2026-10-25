@@ -9,7 +9,8 @@ from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base
-from app.models.enums import Priority, TrackedRoleStatus, TrackedRoleType, enum_type
+from app.enums import Priority, TrackedRoleStatus, TrackedRoleType
+from app.models.enums import enum_type
 from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:

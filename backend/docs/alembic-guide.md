@@ -149,7 +149,7 @@ Compare the
 with [Company](../app/models/company.py),
 [TrackedRole](../app/models/tracked_role/tracked_role.py), and
 [TrackedRoleEvent](../app/models/tracked_role/event.py). The current enum values
-are defined in [enums.py](../app/models/enums.py).
+are defined in [enums.py](../app/enums.py).
 
 The new alignment revision therefore checks for legacy records before changing
 tables. It supports an empty legacy schema and refuses a populated legacy schema

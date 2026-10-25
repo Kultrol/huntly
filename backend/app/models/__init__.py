@@ -15,7 +15,7 @@ from app.models.user import User
 Event = TrackedRoleEvent
 TrackedRoleStatusHistory = StatusHistory
 
-__all__ = [
+__all__: list[str] = [
     "Company",
     "Contact",
     "Event",

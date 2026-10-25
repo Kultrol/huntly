@@ -10,7 +10,8 @@ from sqlalchemy import CheckConstraint, Date, ForeignKey, String, Text, Time, ev
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base
-from app.models.enums import EventStatus, EventType, enum_type
+from app.enums import EventStatus, EventType
+from app.models.enums import enum_type
 from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
