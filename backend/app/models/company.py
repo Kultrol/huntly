@@ -18,18 +18,12 @@ if TYPE_CHECKING:
 
 
 class Company(TimestampMixin, Base):
-    """A company record belonging to one user's private workspace.
+    """A company owned by one user, unique by normalized name within that user.
 
-    Attributes:
-        name: Display name with repeated whitespace collapsed.
-        normalized_name: Case-folded display name used for user-scoped uniqueness.
-        tracked_roles: Opportunities whose company links are cleared on deletion.
-        contacts: People whose company links are cleared on deletion.
-
-    Notes:
-        Normalization handles formatting differences, not legal-name aliases.
-        Another user may independently store the same normalized company name.
-        The foreign key identifies the owner; authorization belongs to callers.
+    Names collapse whitespace and use Unicode case folding for the duplicate key;
+    punctuation and legal-name aliases remain distinct. Deleting a company clears
+    its role and contact links without deleting those records. Callers enforce
+    access to the owner's records.
     """
 
     __tablename__: str = "companies"
@@ -90,21 +84,9 @@ class Company(TimestampMixin, Base):
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
-        """Normalize the display name and synchronize its duplicate-check key.
+        """Collapse whitespace and update the Unicode case-folded duplicate key.
 
-        Args:
-            key: SQLAlchemy attribute name triggering validation.
-            value: Proposed company display name.
-
-        Returns:
-            The name with leading, trailing, and repeated whitespace removed.
-
-        Raises:
-            ValueError: If the value is not a string or contains only whitespace.
-
-        Notes:
-            Also updates ``normalized_name`` using Unicode case folding.
-            Punctuation and company suffixes remain significant for uniqueness.
+        Blank and non-string names are rejected; punctuation and suffixes are retained.
         """
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Company name must contain non-whitespace characters")
@@ -118,21 +100,9 @@ class Company(TimestampMixin, Base):
 def maintain_normalized_name(
     mapper: Mapper[Company], connection: Connection, company: Company
 ) -> None:
-    """Restore the name-derived uniqueness key before an ORM write.
+    """Rebuild the duplicate key before ORM writes, including manual key edits.
 
-    Args:
-        mapper: SQLAlchemy mapper supplied by the persistence event.
-        connection: Connection for the pending write; unused by this hook.
-        company: Company being inserted or updated.
-
-    Returns:
-        None. The company is normalized in place.
-
-    Raises:
-        ValueError: If the company's display name is invalid.
-
-    Notes:
-        Direct SQL writes bypass this ORM hook.
+    Direct SQL writes bypass this hook.
     """
     # A stale or manually assigned key could bypass user-scoped deduplication.
     company.name = company.validate_name("name", company.name)
