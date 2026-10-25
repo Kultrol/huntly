@@ -5,12 +5,12 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, event
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
 
 from app.core.database import Base
 from app.models.mixins import TimestampMixin
 
-# Type-only imports avoid circular imports between models.
 if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.tracked_role.tracked_role import TrackedRole
@@ -18,7 +18,15 @@ if TYPE_CHECKING:
 
 
 class Company(TimestampMixin, Base):
-    __tablename__ = "companies"
+    """A company owned by one user, unique by normalized name within that user.
+
+    Names collapse whitespace and use Unicode case folding for the duplicate key;
+    punctuation and legal-name aliases remain distinct. Deleting a company clears
+    its role and contact links without deleting those records. Callers enforce
+    access to the owner's records.
+    """
+
+    __tablename__: str = "companies"
 
     id: Mapped[UUID] = mapped_column(
         SQL_UUID,
@@ -70,21 +78,31 @@ class Company(TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="companies")
 
-    __table_args__ = (
+    __table_args__: tuple[UniqueConstraint, ...] = (
         UniqueConstraint("user_id", "normalized_name", name="uq_company_user_name"),
     )
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
+        """Collapse whitespace and update the Unicode case-folded duplicate key.
+
+        Blank and non-string names are rejected; punctuation and suffixes are retained.
+        """
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Company name must contain non-whitespace characters")
-        name = " ".join(value.split())
+        name: str = " ".join(value.split())
         self.normalized_name = name.casefold()
         return name
 
 
 @event.listens_for(Company, "before_insert")
 @event.listens_for(Company, "before_update")
-def maintain_normalized_name(mapper, connection, company: Company) -> None:
-    # Recompute normalized_name before saving, even if it was assigned directly.
+def maintain_normalized_name(
+    mapper: Mapper[Company], connection: Connection, company: Company
+) -> None:
+    """Rebuild the duplicate key before ORM writes, including manual key edits.
+
+    Direct SQL writes bypass this hook.
+    """
+    # A stale or manually assigned key could bypass user-scoped deduplication.
     company.name = company.validate_name("name", company.name)

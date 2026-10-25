@@ -1,10 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, user
+from app.api import company, health, user
 from app.core.config import settings
-
-# from app.api import company
 
 app = FastAPI()
 
@@ -23,6 +21,5 @@ def root():
 
 
 app.include_router(health.router)
+app.include_router(company.router)
 app.include_router(user.router)
-
-# app.include_router(company.router)
