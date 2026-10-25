@@ -14,7 +14,13 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    __tablename__ = "users"
+    """Owner of companies, contacts, and opportunities.
+
+    The name is a display name, not a unique login. This model stores no credentials;
+    callers must authenticate users and enforce ownership checks.
+    """
+
+    __tablename__: str = "users"
     id: Mapped[UUID] = mapped_column(SQL_UUID, default=uuid4, primary_key=True)
     name: Mapped[str] = mapped_column(
         String,

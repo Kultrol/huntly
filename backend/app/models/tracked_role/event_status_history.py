@@ -9,7 +9,8 @@ from sqlalchemy import DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base
-from app.models.enums import EventStatus, enum_type
+from app.enums import EventStatus
+from app.models.enums import enum_type
 
 if TYPE_CHECKING:
     from app.models.tracked_role.event import TrackedRoleEvent

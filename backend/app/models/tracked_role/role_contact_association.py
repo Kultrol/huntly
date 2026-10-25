@@ -7,7 +7,8 @@ from sqlalchemy import ForeignKey, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import RelationshipType, enum_type
+from app.enums import RelationshipType
+from app.models.enums import enum_type
 from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:

@@ -5,16 +5,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 
-router = APIRouter(prefix="/health")
+router: APIRouter = APIRouter(prefix="/health")
 
 
-@router.get("")
-def health():
+@router.get("", response_model=None)
+def health() -> dict[str, str]:
+    """Report API liveness without checking the database."""
     return {"status": "ok"}
 
 
-@router.get("/db")
-async def db_health(db: AsyncSession = Depends(get_db)):
+@router.get("/db", response_model=None)
+async def db_health(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Check database connectivity, returning 503 on a database failure.
+
+    This check does not verify migrations or application tables.
+    """
     try:
         await db.execute(text("SELECT 1"))
         return {"database": "ok"}
