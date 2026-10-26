@@ -17,7 +17,15 @@ if TYPE_CHECKING:
 
 
 class StatusHistory(Base):
-    __tablename__ = "status_history"
+    """An opportunity's status transition, deleted with its parent role.
+
+    A null ``from_status`` marks the initial entry by convention. ``occurred_at``
+    is the effective time and may be backdated; the database defaults ``created_at``
+    to the recording time. Callers create entries with status changes. Append-only
+    history and valid transition sequences are not enforced by this model.
+    """
+
+    __tablename__: str = "status_history"
 
     id: Mapped[UUID] = mapped_column(SQL_UUID, primary_key=True, default=uuid4)
     tracked_role_id: Mapped[UUID] = mapped_column(
@@ -44,10 +52,12 @@ class StatusHistory(Base):
     def validate_from_status(
         self, key: str, value: TrackedRoleStatus | str | None
     ) -> TrackedRoleStatus | None:
+        """Resolve the previous stage; None permits an initial history entry."""
         return None if value is None else TrackedRoleStatus(value)
 
     @validates("to_status")
     def validate_to_status(
         self, key: str, value: TrackedRoleStatus | str
     ) -> TrackedRoleStatus:
+        """Resolve the required destination stage to its enum member."""
         return TrackedRoleStatus(value)

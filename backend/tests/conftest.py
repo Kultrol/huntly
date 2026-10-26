@@ -78,20 +78,51 @@ async def saved_contact(sessions, owner_ids, saved_company):
 
 @pytest.fixture
 async def saved_role(sessions, owner_ids, saved_company):
-    from app.models import TrackedRole
+    from app.enums import TrackedRoleStatus
+    from app.schemas.tracked_role import TrackedRoleCreate
+    from app.services.tracked_role import TrackedRoleService
 
     async with sessions.begin() as session:
-        role = TrackedRole(
-            user_id=owner_ids[0],
-            company_id=saved_company.id,
-            title="Backend Developer",
-            status="saved",
-            salary_min=Decimal(80000),
-            salary_max=Decimal(100000),
+        role = await TrackedRoleService(session).create_tracked_role(
+            TrackedRoleCreate(
+                user_id=owner_ids[0],
+                company_id=saved_company.id,
+                title="Backend Developer",
+                status=TrackedRoleStatus.SAVED,
+                salary_min=Decimal(80000),
+                salary_max=Decimal(100000),
+                notes="Original notes",
+            )
+        )
+    return role
+
+
+@pytest.fixture
+async def saved_event(sessions, saved_role):
+    from datetime import UTC, date, datetime
+
+    from app.models import EventStatusHistory, TrackedRoleEvent
+
+    async with sessions.begin() as session:
+        event = TrackedRoleEvent(
+            tracked_role_id=saved_role.id,
+            title="Phone screen",
+            event_type="recruiter_screen",
+            event_date=date(2026, 10, 20),
+            status="scheduled",
             notes="Original notes",
         )
-        session.add(role)
-    return role
+        session.add(event)
+        await session.flush()
+        session.add(
+            EventStatusHistory(
+                event_id=event.id,
+                from_status=None,
+                to_status="scheduled",
+                occurred_at=datetime(2026, 10, 20, tzinfo=UTC),
+            )
+        )
+    return event
 
 
 @pytest.fixture

@@ -4,13 +4,14 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-# The API documentation includes user, company, and contact CRUD contracts.
+# The API documentation includes the registered resource CRUD contracts.
 @pytest.mark.parametrize(
     "path, model",
     [
         ("/users", "User"),
         ("/companies", "Company"),
         ("/contacts", "Contact"),
+        ("/tracked-roles", "TrackedRole"),
     ],
 )
 def test_openapi_registers_crud_routes_and_schemas(path, model):
@@ -38,3 +39,14 @@ def test_openapi_registers_crud_routes_and_schemas(path, model):
         == f"#/components/schemas/{model}Update"
     )
     assert "content" not in detail["delete"]["responses"]["204"]
+
+
+# The API accepts the effective status-change time as an optional query value.
+@pytest.mark.parametrize("path", ["/tracked-roles/"])
+def test_occurrence_time_is_a_query_parameter(path):
+    operation = app.openapi()["paths"][path]["post"]
+    parameter = next(
+        item for item in operation["parameters"] if item["name"] == "occurred_at"
+    )
+    assert parameter["in"] == "query"
+    assert parameter["required"] is False

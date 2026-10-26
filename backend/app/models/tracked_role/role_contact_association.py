@@ -17,9 +17,14 @@ if TYPE_CHECKING:
 
 
 class TrackedRoleContact(TimestampMixin, Base):
-    """A contact's relationship to one specific tracked opportunity."""
+    """A unique contact/opportunity pair with its own relationship type and notes.
 
-    __tablename__ = "tracked_role_contact_associations"
+    The relationship type is separate from the contact's professional title.
+    Deleting either parent removes the link while preserving the other parent.
+    Callers must verify that both parents share an owner.
+    """
+
+    __tablename__: str = "tracked_role_contact_associations"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     relationship_type: Mapped[RelationshipType | None] = mapped_column(
@@ -43,12 +48,12 @@ class TrackedRoleContact(TimestampMixin, Base):
     )
     contact: Mapped[Contact] = relationship(back_populates="role_associations")
 
-    __table_args__ = (
+    __table_args__: tuple[UniqueConstraint, ...] = (
         UniqueConstraint(
             "tracked_role_id", "contact_id", name="unique_tracked_role_contact"
         ),
     )
 
 
-# Keep the old import name working.
+# Older callers use this name for the same association model and table.
 TrackedRoleContactAssociation = TrackedRoleContact
