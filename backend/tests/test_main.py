@@ -4,12 +4,13 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-# The API documentation includes user and company CRUD contracts.
+# The API documentation includes user, company, and contact CRUD contracts.
 @pytest.mark.parametrize(
     "path, model",
     [
         ("/users", "User"),
         ("/companies", "Company"),
+        ("/contacts", "Contact"),
     ],
 )
 def test_openapi_registers_crud_routes_and_schemas(path, model):
