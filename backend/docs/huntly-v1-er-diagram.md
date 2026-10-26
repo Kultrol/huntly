@@ -1,7 +1,6 @@
 # Huntly V1 Entity Relationship Diagram
 
-This diagram documents the V1 relationships from the relationship
-specification. It describes the intended domain model. See also the [V1 domain specification](../backend/docs/domain-v1.md).
+Relationships and ownership rules from the [V1 domain specification](domain-v1.md).
 
 Only identifiers and relationship-relevant attributes are shown; other entity
 attributes and common timestamps are omitted.
