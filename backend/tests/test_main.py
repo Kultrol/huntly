@@ -1,10 +1,21 @@
+from pathlib import Path
+from runpy import run_path
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 
 
-# The API documentation includes the registered resource CRUD contracts.
+# The application's root endpoint returns the expected greeting.
+def test_root_greeting():
+    response = TestClient(app).get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Hello world! From backend."}
+
+
+# The API documentation includes each resource's create, read, update, and delete contracts.
 @pytest.mark.parametrize(
     "path, model",
     [
@@ -51,3 +62,31 @@ def test_occurrence_time_is_a_query_parameter(path):
     )
     assert parameter["in"] == "query"
     assert parameter["required"] is False
+
+
+# Browser preflight requests are allowed only for configured origins and do not allow
+# credentials.
+@pytest.mark.parametrize(
+    "origin, allowed",
+    [("https://allowed.example", True), ("https://blocked.example", False)],
+)
+def test_cors_preflight_allows_only_configured_origins(monkeypatch, origin, allowed):
+    monkeypatch.setattr(settings, "allowed_origins", ["https://allowed.example"])
+    configured_app = run_path(
+        str(Path(__file__).resolve().parents[1] / "app" / "main.py")
+    )["app"]
+    response = TestClient(configured_app).options(
+        "/companies/",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+    assert response.status_code == (200 if allowed else 400)
+    if allowed:
+        assert response.headers["access-control-allow-origin"] == origin
+        assert "POST" in response.headers["access-control-allow-methods"]
+    else:
+        assert "access-control-allow-origin" not in response.headers
+    assert "access-control-allow-credentials" not in response.headers
