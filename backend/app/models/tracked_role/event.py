@@ -7,7 +7,8 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy import CheckConstraint, Date, ForeignKey, String, Text, Time, event
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
 
 from app.core.database import Base
 from app.enums import EventStatus, EventType
@@ -20,9 +21,17 @@ if TYPE_CHECKING:
 
 
 class TrackedRoleEvent(Base, TimestampMixin):
-    __tablename__ = "tracked_role_events"
+    """An activity or deadline owned through its parent opportunity.
 
-    __table_args__ = (
+    The calendar date is required and may be in the past; a missing time remains
+    unknown. CUSTOM requires a label, and other categories forbid one. Status has
+    no default and is not inferred from the date. Callers create status history;
+    deleting an event also deletes its history.
+    """
+
+    __tablename__: str = "tracked_role_events"
+
+    __table_args__: tuple[CheckConstraint, ...] = (
         CheckConstraint(
             "(event_type = 'custom' AND custom_type_name IS NOT NULL "
             "AND length(trim(custom_type_name)) > 0) "
@@ -65,26 +74,36 @@ class TrackedRoleEvent(Base, TimestampMixin):
 
     @validates("title")
     def validate_title(self, key: str, value: str) -> str:
+        """Reject blank titles and collapse whitespace."""
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Event title must contain non-whitespace characters.")
         return " ".join(value.split())
 
     @validates("event_type")
     def validate_event_type(self, key: str, value: EventType | str) -> EventType:
+        """Resolve a canonical event category to its enum member."""
         return EventType(value)
 
     @validates("status")
     def validate_status(self, key: str, value: EventStatus | str) -> EventStatus:
+        """Resolve an explicit status without inferring it from the event date."""
         return EventStatus(value)
 
     @validates("custom_type_name")
     def validate_custom_type_name(self, key: str, value: str | None) -> str | None:
+        """Reject blank labels and labels that reproduce a canonical category.
+
+        Compare without case, treating hyphens and underscores as spaces. Collapse
+        display whitespace while preserving hyphens and underscores; None clears it.
+        """
         if value is None:
             return None
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Custom event type name must not be blank.")
-        normalized_name = re.sub(r"[\s_-]+", " ", value).strip().casefold()
-        canonical_names = {member.value.replace("_", " ") for member in EventType}
+        normalized_name: str = re.sub(r"[\s_-]+", " ", value).strip().casefold()
+        canonical_names: set[str] = {
+            member.value.replace("_", " ") for member in EventType
+        }
         if normalized_name in canonical_names:
             raise ValueError(
                 "Custom event type name must not reproduce a canonical type."
@@ -94,8 +113,15 @@ class TrackedRoleEvent(Base, TimestampMixin):
 
 @event.listens_for(TrackedRoleEvent, "before_insert")
 @event.listens_for(TrackedRoleEvent, "before_update")
-def validate_custom_type(mapper, connection, target: TrackedRoleEvent) -> None:
-    # Check both fields before saving so assignment order does not matter.
+def validate_custom_type(
+    mapper: Mapper[TrackedRoleEvent], connection: Connection, target: TrackedRoleEvent
+) -> None:
+    """Check the final category/label pair before inserting or updating an event.
+
+    The database also enforces the pair, but direct SQL bypasses the ORM's
+    canonical-label check.
+    """
+    # Validate the final pair so callers can assign category and label in either order.
     if target.event_type == EventType.CUSTOM:
         if target.custom_type_name is None:
             raise ValueError("Custom events require a custom type name.")

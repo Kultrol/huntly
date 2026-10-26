@@ -12,6 +12,7 @@ from app.main import app
         ("/companies", "Company"),
         ("/contacts", "Contact"),
         ("/tracked-roles", "TrackedRole"),
+        ("/events", "Event"),
     ],
 )
 def test_openapi_registers_crud_routes_and_schemas(path, model):
@@ -42,7 +43,7 @@ def test_openapi_registers_crud_routes_and_schemas(path, model):
 
 
 # The API accepts the effective status-change time as an optional query value.
-@pytest.mark.parametrize("path", ["/tracked-roles/"])
+@pytest.mark.parametrize("path", ["/tracked-roles/", "/events/"])
 def test_occurrence_time_is_a_query_parameter(path):
     operation = app.openapi()["paths"][path]["post"]
     parameter = next(

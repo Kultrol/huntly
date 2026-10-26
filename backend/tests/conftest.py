@@ -99,27 +99,20 @@ async def saved_role(sessions, owner_ids, saved_company):
 
 @pytest.fixture
 async def saved_event(sessions, saved_role):
-    from datetime import UTC, date, datetime
-
-    from app.models import EventStatusHistory, TrackedRoleEvent
+    from app.schemas.event import EventCreate
+    from app.services.event import EventService
 
     async with sessions.begin() as session:
-        event = TrackedRoleEvent(
-            tracked_role_id=saved_role.id,
-            title="Phone screen",
-            event_type="recruiter_screen",
-            event_date=date(2026, 10, 20),
-            status="scheduled",
-            notes="Original notes",
-        )
-        session.add(event)
-        await session.flush()
-        session.add(
-            EventStatusHistory(
-                event_id=event.id,
-                from_status=None,
-                to_status="scheduled",
-                occurred_at=datetime(2026, 10, 20, tzinfo=UTC),
+        event = await EventService(session).create_event(
+            EventCreate.model_validate(
+                {
+                    "tracked_role_id": saved_role.id,
+                    "title": "Phone screen",
+                    "event_type": "recruiter_screen",
+                    "event_date": "2026-10-20",
+                    "status": "scheduled",
+                    "notes": "Original notes",
+                }
             )
         )
     return event
