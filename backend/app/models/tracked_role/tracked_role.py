@@ -23,9 +23,21 @@ if TYPE_CHECKING:
 
 
 class TrackedRole(TimestampMixin, Base):
-    __tablename__ = "tracked_roles"
+    """A user's opportunity, which may be saved before applying.
 
-    __table_args__ = (
+    Status is required and has no default. Salary bounds are optional decimals;
+    one-sided ranges are valid. ``applied_at`` records the actual application time.
+    Assigning status alone creates no history or application date. Similar postings
+    are allowed, and callers enforce ownership.
+
+    Deleting a role removes its events, histories, and contact associations while
+    preserving companies and contacts. Company deletion clears the optional link.
+    Write contact context through ``contact_associations``; ``contacts`` is read-only.
+    """
+
+    __tablename__: str = "tracked_roles"
+
+    __table_args__: tuple[CheckConstraint, ...] = (
         CheckConstraint("length(trim(title)) > 0", name="ck_tracked_roles_title"),
         CheckConstraint("salary_min >= 0", name="tracked_roles_salary_min_check"),
         CheckConstraint("salary_max >= 0", name="tracked_roles_salary_max_check"),
@@ -132,16 +144,23 @@ class TrackedRole(TimestampMixin, Base):
 
     @validates("title")
     def validate_title(self, key: str, value: str) -> str:
+        """Collapse title whitespace; reject non-string or blank titles."""
         if not isinstance(value, str):
             raise TypeError("A tracked role requires a string title")
-        title = " ".join(value.split())
+        title: str = " ".join(value.split())
         if not title:
             raise ValueError("A tracked role title cannot be blank")
         return title
 
     @validates("status", "priority", "role_type")
-    def validate_enum(self, key: str, value: str | StrEnum | None):
-        enum_class = {
+    def validate_enum(
+        self, key: str, value: str | StrEnum | None
+    ) -> TrackedRoleStatus | Priority | TrackedRoleType | None:
+        """Resolve status, priority, or employment type to an enum member.
+
+        Only priority and employment type may be null; status must be explicit.
+        """
+        enum_class: type[TrackedRoleStatus | Priority | TrackedRoleType] = {
             "status": TrackedRoleStatus,
             "priority": Priority,
             "role_type": TrackedRoleType,
