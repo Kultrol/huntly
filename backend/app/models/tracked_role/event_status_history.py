@@ -17,7 +17,15 @@ if TYPE_CHECKING:
 
 
 class EventStatusHistory(Base):
-    __tablename__ = "event_status_histories"
+    """An event's status transition, deleted with the event.
+
+    A null ``from_status`` marks the initial entry by convention. ``occurred_at``
+    is the effective time and may be backdated; the database defaults ``created_at``
+    to the recording time. Callers create entries with status changes. Append-only
+    history is a convention, not an enforced restriction.
+    """
+
+    __tablename__: str = "event_status_histories"
     id: Mapped[UUID] = mapped_column(SQL_UUID, primary_key=True, default=uuid4)
     event_id: Mapped[UUID] = mapped_column(
         SQL_UUID,
@@ -53,8 +61,10 @@ class EventStatusHistory(Base):
     def validate_from_status(
         self, key: str, value: EventStatus | str | None
     ) -> EventStatus | None:
+        """Resolve the previous status; None permits an initial history entry."""
         return None if value is None else EventStatus(value)
 
     @validates("to_status")
     def validate_to_status(self, key: str, value: EventStatus | str) -> EventStatus:
+        """Resolve the required destination status to its enum member."""
         return EventStatus(value)
