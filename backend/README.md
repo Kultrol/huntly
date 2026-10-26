@@ -69,9 +69,10 @@ separate Compose project `huntly-tests`. The test database is temporary and has
 no host port. Development data and running development containers are separate.
 The script returns the test process's exit status: zero means success.
 
-The three tests check API health, database connectivity, and the response when
-the database is unavailable. The test container applies migrations before running
-them. There are no dedicated migration tests yet.
+The suite covers schemas, database constraints, services, HTTP endpoints,
+transactions, configuration, and migrations. The test container applies
+migrations before running pytest. See [Backend tests](tests/README.md) for focused
+runs, fixture isolation, and coverage boundaries.
 
 ## Bring the schema in line with the models
 
@@ -82,8 +83,8 @@ need an explicit ownership/status conversion plan; the revision does not guess.
 Its downgrade also requires all eight V1 tables to be empty. Existing historical
 revisions remain unchanged. Docker does not generate revisions automatically.
 
-For the guided explanation of what was changed and how to handle your next model
-change, read [Working with Alembic in Huntly](docs/alembic-guide.md).
+See [Working with Alembic](docs/alembic-guide.md) for migration commands, review
+requirements, and the legacy-schema transition.
 
 For a future model change, inspect the database and generate a candidate:
 
