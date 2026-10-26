@@ -17,9 +17,15 @@ if TYPE_CHECKING:
 
 
 class Contact(TimestampMixin, Base):
-    """A user-owned person who may be associated with a company or tracked role."""
+    """A user's contact, stored independently of companies and opportunities.
 
-    __tablename__ = "contacts"
+    ``role`` is the person's professional title. Opportunity-specific roles and
+    notes belong to ``role_associations``; ``tracked_roles`` is a read-only view.
+    Company deletion clears the employer link, and role deletion preserves the
+    contact. Callers must check that linked records have the same owner.
+    """
+
+    __tablename__: str = "contacts"
 
     id: Mapped[UUID] = mapped_column(
         Uuid,
@@ -87,6 +93,7 @@ class Contact(TimestampMixin, Base):
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
+        """Reject blank names and collapse whitespace; contact names need not be unique."""
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Contact name must contain non-whitespace characters")
         return " ".join(value.split())
