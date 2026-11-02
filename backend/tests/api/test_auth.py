@@ -298,6 +298,60 @@ async def test_logout_all_revokes_every_device(
         assert (await other_device.get("/auth/me")).status_code == 401
 
 
+async def test_password_change_revokes_all_sessions_and_changes_credentials(
+    anonymous_client, sessions, client_factory, auth_account
+):
+    async with client_factory() as other_device:
+        assert (
+            await other_device.post(
+                "/auth/login",
+                json={"email": auth_account["email"], "password": PASSWORD},
+            )
+        ).status_code == 200
+        response = await anonymous_client.patch(
+            "/auth/password",
+            json={
+                "current_password": PASSWORD,
+                "new_password": "A different strong password 99!",
+            },
+        )
+        assert response.status_code == 204
+        assert (await anonymous_client.get("/auth/me")).status_code == 401
+        assert (await other_device.get("/auth/me")).status_code == 401
+        assert (
+            await other_device.post(
+                "/auth/login",
+                json={"email": auth_account["email"], "password": PASSWORD},
+            )
+        ).status_code == 401
+        assert (
+            await other_device.post(
+                "/auth/login",
+                json={
+                    "email": auth_account["email"],
+                    "password": "A different strong password 99!",
+                },
+            )
+        ).status_code == 200
+    async with sessions() as session:
+        user = await session.get(User, UUID(auth_account["user"]["id"]))
+        assert verify_password("A different strong password 99!", user.password_hash)
+
+
+async def test_wrong_current_password_preserves_credentials_and_session(
+    anonymous_client, auth_account
+):
+    response = await anonymous_client.patch(
+        "/auth/password",
+        json={
+            "current_password": "Wrong old password",
+            "new_password": "A different strong password 99!",
+        },
+    )
+    assert response.status_code == 401
+    assert (await anonymous_client.get("/auth/me")).status_code == 200
+
+
 @pytest.mark.parametrize("password", ["tiny-pass", "x" * 129])
 async def test_password_validation_does_not_expose_password(anonymous_client, password):
     response = await anonymous_client.post(
@@ -345,3 +399,15 @@ async def test_allowed_origin_can_write_with_valid_csrf(
     )
     assert response.status_code == 200
     assert response.json()["name"] == "Changed"
+
+
+async def test_password_change_validation_does_not_expose_secrets(
+    anonymous_client, auth_account
+):
+    response = await anonymous_client.patch(
+        "/auth/password",
+        json={"current_password": PASSWORD, "new_password": "tiny-secret"},
+    )
+    assert response.status_code == 422
+    assert PASSWORD not in response.text
+    assert "tiny-secret" not in response.text

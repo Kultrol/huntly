@@ -40,6 +40,8 @@ async def unicode_account(anonymous_client, sessions):
     [
         ("register", "password"),
         ("login", "password"),
+        ("password", "current_password"),
+        ("password", "new_password"),
     ],
 )
 async def test_invalid_unicode_password_preserves_account_session_and_cookie(
@@ -96,4 +98,46 @@ async def test_invalid_unicode_password_preserves_account_session_and_cookie(
             await session.scalar(select(User.id).where(User.email == other_email))
             is None
         )
+    assert (await anonymous_client.get("/auth/me")).status_code == 200
+
+
+async def test_valid_unicode_passwords_survive_registration_login_and_password_change(
+    anonymous_client, sessions, unicode_account
+):
+    async with sessions() as session:
+        user = await session.get(User, unicode_account["id"])
+        assert verify_password(PASSWORD, user.password_hash)
+        assert not verify_password(PASSWORD.strip(), user.password_hash)
+
+    login = await anonymous_client.post(
+        "/auth/login",
+        content=json.dumps({"email": unicode_account["email"], "password": PASSWORD}),
+        headers={"Content-Type": "application/json"},
+    )
+    assert login.status_code == 200
+    anonymous_client.headers["X-CSRF-Token"] = login.json()["csrf_token"]
+    change = await anonymous_client.patch(
+        "/auth/password",
+        content=json.dumps(
+            {"current_password": PASSWORD, "new_password": NEW_PASSWORD}
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+    assert change.status_code == 204
+    assert (await anonymous_client.get("/auth/me")).status_code == 401
+    async with sessions() as session:
+        user = await session.get(User, unicode_account["id"])
+        assert verify_password(NEW_PASSWORD, user.password_hash)
+        assert not verify_password(PASSWORD, user.password_hash)
+
+    login = await anonymous_client.post(
+        "/auth/login",
+        content=json.dumps(
+            {"email": unicode_account["email"], "password": NEW_PASSWORD}
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+    assert login.status_code == 200
+    assert login.json()["user"]["id"] == str(unicode_account["id"])
+    assert NEW_PASSWORD not in login.text
     assert (await anonymous_client.get("/auth/me")).status_code == 200

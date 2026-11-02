@@ -96,3 +96,14 @@ class AuthSessionService:
     async def revoke_all(self, user_id: UUID) -> None:
         """Delete every session; callers coordinate any required user-row lock."""
         await self.db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
+
+    async def is_active(self, session_id: UUID, user_id: UUID) -> bool:
+        """Recheck database state rather than trusting an earlier loaded session."""
+        session = await self.db.scalar(
+            select(AuthSession.id).where(
+                AuthSession.id == session_id,
+                AuthSession.user_id == user_id,
+                AuthSession.expires_at > datetime.now(UTC),
+            )
+        )
+        return session is not None

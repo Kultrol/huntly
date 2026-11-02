@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.security import DUMMY_PASSWORD_HASH, hash_password, verify_password
 from app.models import User
-from app.schemas.auth import LoginRequest, RegisterRequest
+from app.schemas.auth import LoginRequest, PasswordChangeRequest, RegisterRequest
 from app.services.auth_session import AuthSessionService
 
 
@@ -63,5 +63,42 @@ class AuthService:
         """Order revocation with concurrent login and password-change operations."""
         await self.db.scalar(
             select(User.id).where(User.id == user_id).with_for_update()
+        )
+        await self.sessions.revoke_all(user_id)
+
+    async def change_password(
+        self, user_id: UUID, session_id: UUID, data: PasswordChangeRequest
+    ) -> None:
+        """Check current credentials, replace the password, and revoke all logins.
+
+        The caller's transaction makes these changes succeed or fail together.
+        """
+        # Authentication already loaded this user. Reload after taking the lock
+        # so a concurrent password change cannot leave us using a cached hash.
+        user = await self.db.scalar(
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if not await self.sessions.is_active(session_id, user_id):
+            raise HTTPException(status_code=401, detail="Authentication required.")
+
+        if user is None or user.password_hash is None:
+            raise HTTPException(
+                status_code=401, detail="Current password is incorrect."
+            )
+        password_matches = await run_in_threadpool(
+            verify_password,
+            data.current_password.get_secret_value(),
+            user.password_hash,
+        )
+        if not password_matches:
+            raise HTTPException(
+                status_code=401, detail="Current password is incorrect."
+            )
+
+        user.password_hash = await run_in_threadpool(
+            hash_password, data.new_password.get_secret_value()
         )
         await self.sessions.revoke_all(user_id)

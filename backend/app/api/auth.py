@@ -27,6 +27,7 @@ from app.core.database import get_db
 from app.schemas.auth import (
     AuthRead,
     LoginRequest,
+    PasswordChangeRequest,
     RegisterRequest,
     SessionRead,
 )
@@ -139,3 +140,16 @@ async def revoke_session(
             raise HTTPException(status_code=404, detail="Session not found.")
     if id == context.session.id:
         clear_session_cookie(response)
+
+
+@router.patch("/password", status_code=204)
+async def change_password(
+    data: PasswordChangeRequest,
+    response: Response,
+    db: Database,
+    context: Authenticated,
+) -> None:
+    """Verify the current password, save its replacement, and revoke all logins."""
+    async with db.begin():
+        await AuthService(db).change_password(context.user.id, context.session.id, data)
+    clear_session_cookie(response)
