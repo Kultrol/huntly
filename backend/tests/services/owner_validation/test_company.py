@@ -92,10 +92,10 @@ async def test_company_owner_lookup_database_error_preserves_cause(operation):
     session.scalars.assert_not_awaited()
 
 
-# Both company routes must return 404 for an unknown owner without saving a row.
+# Route ownership comes from the session; a supplied unknown owner cannot change it.
 @pytest.mark.parametrize("method", ["GET", "POST"])
-async def test_missing_company_owner_route_returns_404_without_saving_rows(
-    sessions, api_client, method
+async def test_company_routes_derive_owner_from_authenticated_user(
+    sessions, api_client, owner_ids, saved_company, method
 ):
     missing_owner_id = uuid4()
     if method == "POST":
@@ -103,21 +103,27 @@ async def test_missing_company_owner_route_returns_404_without_saving_rows(
             "/companies/",
             json={"user_id": str(missing_owner_id), "name": "Example company"},
         )
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Cannot create records for another user."}
     else:
         response = await api_client.get(
             "/companies/", params={"user_id": str(missing_owner_id)}
         )
-
-    assert response.status_code == 404
-    assert response.json() == {"detail": f"User with id {missing_owner_id} not found."}
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()] == [str(saved_company.id)]
+        assert response.json()[0]["user_id"] == str(owner_ids[0])
 
     async with sessions() as session:
-        failed_owner_records = list(
+        owner_records = list(
             await session.scalars(
-                select(Company).where(Company.user_id == missing_owner_id)
+                select(Company).where(
+                    Company.user_id.in_((owner_ids[0], missing_owner_id))
+                )
             )
         )
-        assert failed_owner_records == []
+        assert [record.id for record in owner_records] == [saved_company.id]
+        assert owner_records[0].user_id == owner_ids[0]
+        assert owner_records[0].name == saved_company.name
 
 
 # Both company routes must translate an owner lookup failure to HTTP 500.

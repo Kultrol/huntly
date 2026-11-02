@@ -19,7 +19,6 @@ def test_root_greeting():
 @pytest.mark.parametrize(
     "path, model",
     [
-        ("/users", "User"),
         ("/companies", "Company"),
         ("/contacts", "Contact"),
         ("/tracked-roles", "TrackedRole"),
@@ -38,7 +37,7 @@ def test_openapi_registers_crud_routes_and_schemas(path, model):
         collection["post"]["requestBody"]["content"]["application/json"]["schema"][
             "$ref"
         ]
-        == f"#/components/schemas/{model}Create"
+        == f"#/components/schemas/{model}{'CreateRequest' if model != 'Event' else 'Create'}"
     )
     assert (
         collection["post"]["responses"]["201"]["content"]["application/json"]["schema"][
@@ -64,8 +63,32 @@ def test_occurrence_time_is_a_query_parameter(path):
     assert parameter["required"] is False
 
 
-# Browser preflight requests are allowed only for configured origins and do not allow
-# credentials.
+def test_openapi_documents_csrf_header_for_authenticated_writes():
+    for path, operations in app.openapi()["paths"].items():
+        if path in {"/auth/register", "/auth/login"}:
+            continue
+        for method, operation in operations.items():
+            if method not in {"post", "patch", "put", "delete"}:
+                continue
+            header = next(
+                parameter
+                for parameter in operation.get("parameters", [])
+                if parameter["name"] == "X-CSRF-Token"
+            )
+            assert header["in"] == "header", (method, path)
+            assert header["required"] is False, (method, path)
+
+
+@pytest.mark.parametrize("path", ["/auth/register", "/auth/login"])
+def test_openapi_does_not_request_csrf_for_public_authentication(path):
+    operation = app.openapi()["paths"][path]["post"]
+    assert not any(
+        parameter["name"] == "X-CSRF-Token"
+        for parameter in operation.get("parameters", [])
+    )
+
+
+# Browser preflight requests allow credentials for explicitly configured origins.
 @pytest.mark.parametrize(
     "origin, allowed",
     [("https://allowed.example", True), ("https://blocked.example", False)],
@@ -89,4 +112,4 @@ def test_cors_preflight_allows_only_configured_origins(monkeypatch, origin, allo
         assert "POST" in response.headers["access-control-allow-methods"]
     else:
         assert "access-control-allow-origin" not in response.headers
-    assert "access-control-allow-credentials" not in response.headers
+    assert response.headers["access-control-allow-credentials"] == "true"

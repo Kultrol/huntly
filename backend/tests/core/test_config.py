@@ -87,3 +87,81 @@ def test_settings_reject_malformed_environment_origin_json(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "not-json")
     with pytest.raises(SettingsError, match="allowed_origins"):
         Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "*",
+        "https://*.example.com",
+        "https://example.com/path",
+        "https://example.com/",
+        "https://example.com?query=1",
+        "https://example.com#fragment",
+        "https://user:password@example.com",
+        "file://example.com",
+        "example.com",
+    ],
+)
+def test_cookie_auth_requires_explicit_browser_origins(
+    clean_settings_environment, origin
+):
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://example.invalid/test",
+            allowed_origins=[origin],
+        )
+    assert any(
+        error["loc"] == ("allowed_origins",) for error in exc_info.value.errors()
+    )
+
+
+def test_session_settings_default_to_secure_cookie_and_one_week(
+    clean_settings_environment, monkeypatch
+):
+    for key in (
+        "SESSION_COOKIE_SECURE",
+        "SESSION_COOKIE_NAME",
+        "SESSION_LIFETIME_SECONDS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    config = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://example.invalid/test",
+        allowed_origins=[],
+    )
+    assert config.session_cookie_secure is True
+    assert config.session_cookie_name == "huntly_session"
+    assert config.session_lifetime_seconds == 604800
+
+
+@pytest.mark.parametrize("lifetime", [299, 2592001, 0, -1])
+def test_invalid_session_lifetimes_are_rejected(clean_settings_environment, lifetime):
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://example.invalid/test",
+            allowed_origins=[],
+            session_lifetime_seconds=lifetime,
+        )
+    assert any(
+        error["loc"] == ("session_lifetime_seconds",)
+        for error in exc_info.value.errors()
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["", "invalid;cookie", "invalid cookie", "invalid=cookie"]
+)
+def test_invalid_session_cookie_names_are_rejected(clean_settings_environment, name):
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://example.invalid/test",
+            allowed_origins=[],
+            session_cookie_name=name,
+        )
+    assert any(
+        error["loc"] == ("session_cookie_name",) for error in exc_info.value.errors()
+    )

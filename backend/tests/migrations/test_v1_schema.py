@@ -15,6 +15,7 @@ from app.core.database import Base
 
 LEGACY_REVISION = "6ba2d65b164c"
 V1_REVISION = "22017b5e84d4"
+AUTH_REVISION = "a6d4f9b2c813"
 LEGACY_TABLES = {
     "companies",
     "contacts",
@@ -24,6 +25,7 @@ LEGACY_TABLES = {
 }
 DOMAIN_TABLES = {
     "users",
+    "auth_sessions",
     "companies",
     "contacts",
     "tracked_roles",
@@ -72,7 +74,7 @@ def test_empty_legacy_upgrade_matches_current_models(migration_db):
     }
     assert (
         connection.scalar(text("SELECT version_num FROM alembic_version"))
-        == V1_REVISION
+        == AUTH_REVISION
     )
     context = MigrationContext.configure(
         connection, opts={"compare_server_default": True}
@@ -127,7 +129,7 @@ def test_populated_legacy_upgrade_is_refused_without_data_loss(migration_db):
 # revision.
 def test_populated_v1_downgrade_is_refused_without_data_loss(migration_db):
     connection, config = migration_db
-    command.upgrade(config, "head")
+    command.upgrade(config, V1_REVISION)
     user_id = uuid4()
     connection.execute(
         text("INSERT INTO users (id, name) VALUES (:id, 'Preserve me')"),
@@ -147,9 +149,9 @@ def test_populated_v1_downgrade_is_refused_without_data_loss(migration_db):
         connection.scalar(text("SELECT version_num FROM alembic_version"))
         == V1_REVISION
     )
-    assert set(inspect(connection).get_table_names()) == DOMAIN_TABLES | {
-        "alembic_version"
-    }
+    assert set(inspect(connection).get_table_names()) == DOMAIN_TABLES - {
+        "auth_sessions"
+    } | {"alembic_version"}
 
 
 # The migrated tables enforce company uniqueness, valid fields, and the expected deletion
@@ -205,3 +207,213 @@ def test_migrated_schema_has_owner_uniqueness_and_deletion_rules(migration_db):
         item["name"] for item in inspector.get_check_constraints("tracked_role_events")
     }
     assert "ck_tracked_role_events_custom_type_name" in event_checks
+
+
+def test_auth_upgrade_preserves_existing_user_and_company(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, V1_REVISION)
+    user_id, company_id = uuid4(), uuid4()
+    connection.execute(
+        text("INSERT INTO users (id, name) VALUES (:id, 'Existing owner')"),
+        {"id": user_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO companies (id, user_id, name, normalized_name) "
+            "VALUES (:id, :user_id, 'Existing company', 'existing company')"
+        ),
+        {"id": company_id, "user_id": user_id},
+    )
+    connection.commit()
+
+    command.upgrade(config, "head")
+
+    user = connection.execute(
+        text("SELECT name, email, password_hash FROM users WHERE id = :id"),
+        {"id": user_id},
+    ).one()
+    assert tuple(user) == ("Existing owner", None, None)
+    company = connection.execute(
+        text("SELECT name, user_id FROM companies WHERE id = :id"),
+        {"id": company_id},
+    ).one()
+    assert tuple(company) == ("Existing company", user_id)
+    assert connection.scalar(text("SELECT COUNT(*) FROM auth_sessions")) == 0
+
+
+@pytest.mark.parametrize(
+    "email, password_hash", [("owner@example.com", None), (None, "password-hash")]
+)
+def test_auth_migration_requires_credentials_together(
+    migration_db, email, password_hash
+):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    with pytest.raises(DBAPIError, match="ck_users_credentials_pair"):
+        connection.execute(
+            text(
+                "INSERT INTO users (id, name, email, password_hash) "
+                "VALUES (:id, 'Owner', :email, :password_hash)"
+            ),
+            {"id": uuid4(), "email": email, "password_hash": password_hash},
+        )
+
+
+def test_auth_migration_rejects_duplicate_emails(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    connection.execute(
+        text(
+            "INSERT INTO users (id, name, email, password_hash) "
+            "VALUES (:id, 'Owner', 'owner@example.com', 'password-hash')"
+        ),
+        {"id": uuid4()},
+    )
+    connection.commit()
+    with pytest.raises(DBAPIError, match="uq_users_email"):
+        connection.execute(
+            text(
+                "INSERT INTO users (id, name, email, password_hash) "
+                "VALUES (:id, 'Other owner', 'owner@example.com', 'other-hash')"
+            ),
+            {"id": uuid4()},
+        )
+
+
+def test_auth_session_foreign_key_cascades_and_hash_is_unique(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    user_id, session_id = uuid4(), uuid4()
+    connection.execute(
+        text("INSERT INTO users (id, name) VALUES (:id, 'Owner')"),
+        {"id": user_id},
+    )
+    statement = text(
+        "INSERT INTO auth_sessions "
+        "(id, user_id, token_hash, csrf_token_hash, created_at, expires_at) "
+        "VALUES (:id, :user_id, :token_hash, :csrf_token_hash, "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 day')"
+    )
+    fields = {
+        "id": session_id,
+        "user_id": user_id,
+        "token_hash": "a" * 64,
+        "csrf_token_hash": "b" * 64,
+    }
+    connection.execute(statement, fields)
+    connection.commit()
+    with pytest.raises(DBAPIError, match="auth_sessions_token_hash_key"):
+        connection.execute(statement, {**fields, "id": uuid4()})
+    connection.rollback()
+    connection.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+    assert connection.scalar(text("SELECT COUNT(*) FROM auth_sessions")) == 0
+
+
+def test_auth_session_rejects_nonexistent_owner(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    with pytest.raises(DBAPIError, match="auth_sessions_user_id_fkey"):
+        connection.execute(
+            text(
+                "INSERT INTO auth_sessions "
+                "(id, user_id, token_hash, csrf_token_hash, created_at, expires_at) "
+                "VALUES (:id, :user_id, :token_hash, :csrf_token_hash, "
+                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 day')"
+            ),
+            {
+                "id": uuid4(),
+                "user_id": uuid4(),
+                "token_hash": "a" * 64,
+                "csrf_token_hash": "b" * 64,
+            },
+        )
+
+
+def test_auth_downgrade_refuses_to_discard_credentials(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    user_id = uuid4()
+    connection.execute(
+        text(
+            "INSERT INTO users (id, name, email, password_hash) "
+            "VALUES (:id, 'Owner', 'owner@example.com', 'preserve-hash')"
+        ),
+        {"id": user_id},
+    )
+    connection.commit()
+    with pytest.raises(DBAPIError, match="Cannot downgrade populated authentication"):
+        command.downgrade(config, V1_REVISION)
+    connection.rollback()
+    assert (
+        connection.scalar(
+            text("SELECT password_hash FROM users WHERE id = :id"), {"id": user_id}
+        )
+        == "preserve-hash"
+    )
+    assert (
+        connection.scalar(text("SELECT version_num FROM alembic_version"))
+        == AUTH_REVISION
+    )
+
+
+def test_auth_downgrade_refuses_to_discard_sessions(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    user_id, session_id = uuid4(), uuid4()
+    connection.execute(
+        text("INSERT INTO users (id, name) VALUES (:id, 'Existing owner')"),
+        {"id": user_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO auth_sessions "
+            "(id, user_id, token_hash, csrf_token_hash, created_at, expires_at) "
+            "VALUES (:id, :user_id, :token_hash, :csrf_token_hash, "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 day')"
+        ),
+        {
+            "id": session_id,
+            "user_id": user_id,
+            "token_hash": "a" * 64,
+            "csrf_token_hash": "b" * 64,
+        },
+    )
+    connection.commit()
+    with pytest.raises(DBAPIError, match="Cannot downgrade populated authentication"):
+        command.downgrade(config, V1_REVISION)
+    connection.rollback()
+    assert (
+        connection.scalar(
+            text("SELECT token_hash FROM auth_sessions WHERE id = :id"),
+            {"id": session_id},
+        )
+        == "a" * 64
+    )
+    assert (
+        connection.scalar(text("SELECT version_num FROM alembic_version"))
+        == AUTH_REVISION
+    )
+
+
+def test_auth_downgrade_preserves_credentialless_users(migration_db):
+    connection, config = migration_db
+    command.upgrade(config, "head")
+    user_id = uuid4()
+    connection.execute(
+        text("INSERT INTO users (id, name) VALUES (:id, 'Existing owner')"),
+        {"id": user_id},
+    )
+    connection.commit()
+
+    command.downgrade(config, V1_REVISION)
+
+    assert (
+        connection.scalar(
+            text("SELECT name FROM users WHERE id = :id"), {"id": user_id}
+        )
+        == "Existing owner"
+    )
+    assert "auth_sessions" not in inspect(connection).get_table_names()
+    assert "email" not in {
+        column["name"] for column in inspect(connection).get_columns("users")
+    }

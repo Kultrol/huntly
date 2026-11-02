@@ -37,10 +37,9 @@ async def test_role_list_excludes_other_owners_records(
 
 # A user with no opportunities receives an empty list even when another user has records.
 async def test_role_list_for_owner_without_roles_is_empty(
-    api_client, owner_ids, saved_role
+    client_factory, owner_ids, saved_role
 ):
-    response = await api_client.get(
-        "/tracked-roles/", params={"user_id": str(owner_ids[1])}
-    )
+    async with client_factory(owner_ids[1]) as client:
+        response = await client.get("/tracked-roles/")
     assert response.status_code == 200
     assert response.json() == []
