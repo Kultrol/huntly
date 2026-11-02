@@ -1,5 +1,6 @@
 """Import all models so Alembic can find their tables."""
 
+from app.models.auth_session import AuthSession
 from app.models.company import Company
 from app.models.contact import Contact
 from app.models.tracked_role.event import TrackedRoleEvent
@@ -16,6 +17,7 @@ Event = TrackedRoleEvent
 TrackedRoleStatusHistory = StatusHistory
 
 __all__: list[str] = [
+    "AuthSession",
     "Company",
     "Contact",
     "Event",

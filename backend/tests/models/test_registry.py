@@ -15,6 +15,7 @@ from app.models import (
 def test_models_register_all_domain_tables():
     assert set(Base.metadata.tables) == {
         "users",
+        "auth_sessions",
         "companies",
         "contacts",
         "tracked_roles",
@@ -24,7 +25,7 @@ def test_models_register_all_domain_tables():
         "tracked_role_contact_associations",
     }
     configure_mappers()
-    assert len(Base.registry.mappers) == 8
+    assert len(Base.registry.mappers) == 9
 
 
 # Compatibility names refer to the same classes without creating extra mappings.
