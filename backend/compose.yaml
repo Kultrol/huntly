@@ -48,6 +48,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${DATABASE_NAME}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_LIFETIME_SECONDS: ${SESSION_LIFETIME_SECONDS:-604800}
 
     volumes:
       - .:/app
@@ -70,6 +72,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db_test:5432/${TEST_DATABASE_NAME}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env}
+      SESSION_COOKIE_SECURE: "false"
 
     command: >
       sh -c "alembic upgrade head && exec pytest -v"
