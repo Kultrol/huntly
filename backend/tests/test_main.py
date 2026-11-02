@@ -19,7 +19,6 @@ def test_root_greeting():
 @pytest.mark.parametrize(
     "path, model",
     [
-        ("/users", "User"),
         ("/companies", "Company"),
         ("/contacts", "Contact"),
         ("/tracked-roles", "TrackedRole"),
@@ -64,8 +63,16 @@ def test_occurrence_time_is_a_query_parameter(path):
     assert parameter["required"] is False
 
 
-# Browser preflight requests are allowed only for configured origins and do not allow
-# credentials.
+@pytest.mark.parametrize("path", ["/auth/register", "/auth/login"])
+def test_openapi_does_not_request_csrf_for_public_authentication(path):
+    operation = app.openapi()["paths"][path]["post"]
+    assert not any(
+        parameter["name"] == "X-CSRF-Token"
+        for parameter in operation.get("parameters", [])
+    )
+
+
+# Browser preflight requests allow credentials for explicitly configured origins.
 @pytest.mark.parametrize(
     "origin, allowed",
     [("https://allowed.example", True), ("https://blocked.example", False)],
@@ -89,4 +96,4 @@ def test_cors_preflight_allows_only_configured_origins(monkeypatch, origin, allo
         assert "POST" in response.headers["access-control-allow-methods"]
     else:
         assert "access-control-allow-origin" not in response.headers
-    assert "access-control-allow-credentials" not in response.headers
+    assert response.headers["access-control-allow-credentials"] == "true"

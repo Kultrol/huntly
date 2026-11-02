@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+from secrets import token_urlsafe
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,8 +9,10 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core import database
+from app.core.auth import SESSION_COOKIE_NAME
+from app.core.security import csrf_token_for_session, digest_token
 from app.main import app
-from app.models import Company, User
+from app.models import AuthSession, Company, User
 
 pytestmark = pytest.mark.anyio
 
@@ -96,8 +100,22 @@ async def test_production_session_can_serialize_response_after_commit(
         return production_factory(bind=sessions.kw["bind"])
 
     monkeypatch.setattr(database, "SessionLocal", create_session)
+    token = token_urlsafe(32)
+    csrf_token = csrf_token_for_session(token)
+    async with sessions.begin() as session:
+        session.add(
+            AuthSession(
+                user_id=owner_ids[0],
+                token_hash=digest_token(token),
+                csrf_token_hash=digest_token(csrf_token),
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies={SESSION_COOKIE_NAME: token},
+        headers={"X-CSRF-Token": csrf_token},
     ) as client:
         response = await client.patch(f"/users/{owner_ids[0]}", json={"name": "Janet"})
     assert response.status_code == 200

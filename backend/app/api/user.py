@@ -1,99 +1,104 @@
-"""User-record endpoints with request-owned transactions.
+"""Authenticated profile endpoints; user IDs never grant access by themselves.
 
-These routes do not provide authentication or authorize access to user records.
+Routes pass the signed-in user's ID to the shared helpers. Routes accepting an
+explicit ID must first check it with require_self.
 """
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.status import (
-    HTTP_201_CREATED,
-    HTTP_204_NO_CONTENT,
-    HTTP_404_NOT_FOUND,
-    HTTP_500_INTERNAL_SERVER_ERROR,
-)
 
+from app.api.auth_responses import clear_session_cookie
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import UserRead, UserUpdate
 from app.services.exceptions.user import UserNotFoundError, UserServiceError
 from app.services.user import UserService
 
-router: APIRouter = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"])
+Database = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-@router.get("/", response_model=list[UserRead])
-async def get_all_users(db: AsyncSession = Depends(get_db)) -> list[User]:
-    """List stored users, ordered by name and UUID."""
+def require_self(id: UUID, user: User) -> None:
+    """Hide another user's profile behind the same 404 used for a missing user."""
+    if id != user.id:
+        raise HTTPException(status_code=404, detail=f"User with id {id} not found.")
+
+
+async def read_profile(id: UUID, db: AsyncSession) -> User:
+    """Read a profile after the caller has checked that it is the current user's."""
     async with db.begin():
-        user_service: UserService = UserService(db)
         try:
-            return await user_service.get_all_users()
+            return await UserService(db).get_user(id)
+        except UserNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except UserServiceError as exc:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-            )
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+async def edit_profile(id: UUID, data: UserUpdate, db: AsyncSession) -> User:
+    """Commit validated profile fields for an ID authorized by the calling route."""
+    async with db.begin():
+        try:
+            return await UserService(db).update_user(id, data)
+        except UserNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except UserServiceError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+async def remove_profile(id: UUID, db: AsyncSession, response: Response) -> None:
+    """Delete an authorized profile only after its owned domain records are removed.
+
+    The existing service retains that deletion constraint. Successful deletion
+    also cascades to login sessions; clear the browser cookie after commit.
+    """
+    async with db.begin():
+        try:
+            await UserService(db).delete_user(id)
+        except UserNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except UserServiceError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+    clear_session_cookie(response)
+
+
+@router.get("/me", response_model=UserRead)
+async def me(db: Database, user: CurrentUser) -> User:
+    return await read_profile(user.id, db)
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_me(data: UserUpdate, db: Database, user: CurrentUser) -> User:
+    return await edit_profile(user.id, data, db)
+
+
+@router.delete("/me", status_code=204)
+async def delete_me(response: Response, db: Database, user: CurrentUser) -> None:
+    await remove_profile(user.id, db, response)
 
 
 @router.get("/{id}", response_model=UserRead)
-async def get_user(id: UUID, db: AsyncSession = Depends(get_db)) -> User:
-    """Retrieve a stored user by UUID."""
-    async with db.begin():
-        user_service: UserService = UserService(db)
-        try:
-            return await user_service.get_user(id)
-        except UserNotFoundError as exc:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(exc))
-        except UserServiceError as exc:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-            )
-
-
-@router.post("/", response_model=UserRead, status_code=HTTP_201_CREATED)
-async def create_user(new_user: UserCreate, db: AsyncSession = Depends(get_db)) -> User:
-    """Create a user record with a display name."""
-    async with db.begin():
-        user_service: UserService = UserService(db)
-        try:
-            return await user_service.create_user(new_user)
-        except UserServiceError as exc:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-            )
+async def get_user(id: UUID, db: Database, user: CurrentUser) -> User:
+    require_self(id, user)
+    return await read_profile(id, db)
 
 
 @router.patch("/{id}", response_model=UserRead)
 async def update_user(
-    id: UUID, user_data: UserUpdate, db: AsyncSession = Depends(get_db)
+    id: UUID, user_data: UserUpdate, db: Database, user: CurrentUser
 ) -> User:
-    """Apply a supplied display name; an omitted name remains unchanged."""
-    async with db.begin():
-        user_service: UserService = UserService(db)
-        try:
-            return await user_service.update_user(id, user_data)
-        except UserNotFoundError as exc:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(exc))
-        except UserServiceError as exc:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-            )
+    require_self(id, user)
+    return await edit_profile(id, user_data, db)
 
 
-@router.delete("/{id}", status_code=HTTP_204_NO_CONTENT)
-async def delete_user(id: UUID, db: AsyncSession = Depends(get_db)) -> None:
-    """Delete a user record.
-
-    Deletion can fail while the user still owns companies, contacts, or roles.
-    """
-    async with db.begin():
-        user_service: UserService = UserService(db)
-        try:
-            await user_service.delete_user(id)
-        except UserNotFoundError as exc:
-            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(exc))
-        except UserServiceError as exc:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
-            )
+@router.delete("/{id}", status_code=204)
+async def delete_user(
+    id: UUID, response: Response, db: Database, user: CurrentUser
+) -> None:
+    require_self(id, user)
+    await remove_profile(id, db, response)

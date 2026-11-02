@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -119,25 +121,79 @@ async def saved_event(sessions, saved_role):
 
 
 @pytest.fixture
-async def api_client(sessions):
+async def client_factory(sessions, monkeypatch):
+    """Open anonymous or signed-in clients using the real session/CSRF checks.
+
+    Each request receives a fresh database session from the test factory. Passing
+    an owner ID seeds a login directly so resource tests can focus on ownership;
+    registration and login tests instead start with an anonymous client.
+    """
     from httpx2 import ASGITransport, AsyncClient
 
+    from app.core.config import settings
     from app.core.database import get_db
+    from app.core.security import csrf_token_for_session, digest_token
     from app.main import app
+    from app.models import AuthSession
+
+    # The in-process client uses HTTP, so it cannot send HTTPS-only cookies.
+    monkeypatch.setattr(settings, "session_cookie_secure", False)
 
     async def override_get_db():
         async with sessions() as session:
             yield session
 
+    @asynccontextmanager
+    async def make_client(owner_id=None, *, raise_app_exceptions=True):
+        headers = {}
+        cookies = {}
+        if owner_id is not None:
+            # Store only token digests, just as production session creation does.
+            token = uuid4().hex + uuid4().hex
+            csrf_token = csrf_token_for_session(token)
+            async with sessions.begin() as session:
+                session.add(
+                    AuthSession(
+                        user_id=owner_id,
+                        token_hash=digest_token(token),
+                        csrf_token_hash=digest_token(csrf_token),
+                        expires_at=datetime.now(UTC) + timedelta(hours=1),
+                    )
+                )
+            headers["X-CSRF-Token"] = csrf_token
+            cookies[settings.session_cookie_name] = token
+        async with AsyncClient(
+            transport=ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions),
+            base_url="http://test",
+            headers=headers,
+            cookies=cookies,
+        ) as client:
+            yield client
+
+    # Restore the earlier dependency after the test to avoid leaking test state.
     previous_override = app.dependency_overrides.get(get_db)
     app.dependency_overrides[get_db] = override_get_db
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            yield client
+        yield make_client
     finally:
         if previous_override is None:
             app.dependency_overrides.pop(get_db, None)
         else:
             app.dependency_overrides[get_db] = previous_override
+
+
+@pytest.fixture
+async def api_client(client_factory, owner_ids):
+    async with client_factory(owner_ids[0]) as client:
+        yield client
+
+
+@pytest.fixture
+async def anonymous_client(client_factory):
+    async with client_factory() as client:
+        yield client
+
+
+@pytest.fixture
+def authenticated_client_factory(client_factory):
+    return client_factory
