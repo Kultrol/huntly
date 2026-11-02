@@ -1,5 +1,7 @@
 """Manage account credentials within transactions owned by the API routes."""
 
+from uuid import UUID
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,3 +58,10 @@ class AuthService:
             raise HTTPException(status_code=401, detail="Invalid email or password.")
         token = await self.sessions.create(user.id, old_token)
         return user, token
+
+    async def logout_all(self, user_id: UUID) -> None:
+        """Order revocation with concurrent login and password-change operations."""
+        await self.db.scalar(
+            select(User.id).where(User.id == user_id).with_for_update()
+        )
+        await self.sessions.revoke_all(user_id)

@@ -62,3 +62,37 @@ class AuthSessionService:
         if result is None:
             return None
         return result[0], result[1]
+
+    async def find_by_token(self, token: str | None) -> AuthSession | None:
+        """Include expired sessions so logout can clean them up idempotently."""
+        if token is None or len(token) > 128:
+            return None
+        return await self.db.scalar(
+            select(AuthSession).where(AuthSession.token_hash == digest_token(token))
+        )
+
+    async def list_active(self, user_id: UUID) -> list[AuthSession]:
+        """Return this owner's live sessions in stable creation order."""
+        return list(
+            await self.db.scalars(
+                select(AuthSession)
+                .where(
+                    AuthSession.user_id == user_id,
+                    AuthSession.expires_at > datetime.now(UTC),
+                )
+                .order_by(AuthSession.created_at, AuthSession.id)
+            )
+        )
+
+    async def revoke_owned(self, session_id: UUID, user_id: UUID) -> bool:
+        """Delete only an owned session and report whether it existed."""
+        result = await self.db.execute(
+            delete(AuthSession).where(
+                AuthSession.id == session_id, AuthSession.user_id == user_id
+            )
+        )
+        return result.rowcount > 0
+
+    async def revoke_all(self, user_id: UUID) -> None:
+        """Delete every session; callers coordinate any required user-row lock."""
+        await self.db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))

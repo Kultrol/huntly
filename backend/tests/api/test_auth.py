@@ -173,6 +173,7 @@ async def test_failed_login_uses_same_generic_error(
     "path",
     [
         "/auth/me",
+        "/auth/sessions",
         "/users/me",
     ],
 )
@@ -242,6 +243,59 @@ async def test_authentication_rejects_simple_content_type(anonymous_client, path
         + '"}',
     )
     assert response.status_code in (403, 415)
+
+
+async def test_logout_revokes_session_and_is_idempotent(
+    anonymous_client, sessions, auth_account
+):
+    token = anonymous_client.cookies.get(settings.session_cookie_name)
+    response = await anonymous_client.post("/auth/logout")
+    assert response.status_code == 204
+    assert "max-age=0" in response.headers["set-cookie"].lower()
+    async with sessions() as session:
+        assert (
+            await session.scalar(
+                select(AuthSession).where(AuthSession.token_hash == digest_token(token))
+            )
+            is None
+        )
+    assert (await anonymous_client.get("/auth/me")).status_code == 401
+    assert (await anonymous_client.post("/auth/logout")).status_code == 204
+
+
+async def test_list_and_revoke_only_own_sessions(
+    anonymous_client, api_client, auth_account
+):
+    response = await anonymous_client.get("/auth/sessions")
+    assert response.status_code == 200
+    own_sessions = response.json()
+    assert len(own_sessions) == 1
+    current = own_sessions[0]
+    assert current["current"] is True
+    assert set(current) == {"id", "created_at", "expires_at", "current"}
+    foreign = (await api_client.get("/auth/sessions")).json()[0]
+    assert (
+        await anonymous_client.delete(f"/auth/sessions/{foreign['id']}")
+    ).status_code == 404
+    assert (await api_client.get("/auth/me")).status_code == 200
+    assert (
+        await anonymous_client.delete(f"/auth/sessions/{current['id']}")
+    ).status_code == 204
+    assert (await anonymous_client.get("/auth/me")).status_code == 401
+
+
+async def test_logout_all_revokes_every_device(
+    anonymous_client, client_factory, auth_account
+):
+    async with client_factory() as other_device:
+        response = await other_device.post(
+            "/auth/login", json={"email": auth_account["email"], "password": PASSWORD}
+        )
+        assert response.status_code == 200
+        assert len((await anonymous_client.get("/auth/sessions")).json()) == 2
+        assert (await anonymous_client.post("/auth/logout-all")).status_code == 204
+        assert (await anonymous_client.get("/auth/me")).status_code == 401
+        assert (await other_device.get("/auth/me")).status_code == 401
 
 
 @pytest.mark.parametrize("password", ["tiny-pass", "x" * 129])
