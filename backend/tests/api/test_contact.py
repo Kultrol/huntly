@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.models import Contact, TrackedRole, TrackedRoleContact
+from app.models import Company, Contact, TrackedRole, TrackedRoleContact
 from app.services.contact import ContactService
 from app.services.exceptions.contact import ContactServiceError
 
@@ -64,9 +64,10 @@ async def test_contact_list_excludes_other_owners_records(
 
 # A user with no contacts receives an empty list even when another user has contacts.
 async def test_contact_list_for_owner_without_contacts_is_empty(
-    api_client, owner_ids, saved_contact
+    client_factory, owner_ids, saved_contact
 ):
-    response = await api_client.get("/contacts/", params={"user_id": str(owner_ids[1])})
+    async with client_factory(owner_ids[1]) as client:
+        response = await client.get("/contacts/")
     assert response.status_code == 200
     assert response.json() == []
 
@@ -95,24 +96,26 @@ async def test_contact_patch_clears_nullable_fields_and_preserves_name(
 # Creating or updating a contact cannot associate it with another user's company.
 @pytest.mark.parametrize("method", ["POST", "PATCH"])
 async def test_contact_api_rejects_other_owners_company(
-    api_client, sessions, owner_ids, saved_contact, saved_company, method
+    api_client,
+    client_factory,
+    sessions,
+    owner_ids,
+    saved_contact,
+    saved_company,
+    method,
 ):
     if method == "POST":
-        response = await api_client.post(
-            "/contacts/",
-            json={
-                "user_id": str(owner_ids[1]),
-                "name": "Rejected",
-                "company_id": str(saved_company.id),
-            },
-        )
+        async with client_factory(owner_ids[1]) as client:
+            response = await client.post(
+                "/contacts/",
+                json={"name": "Rejected", "company_id": str(saved_company.id)},
+            )
     else:
-        response = await api_client.post(
-            "/companies/", json={"user_id": str(owner_ids[1]), "name": "Other company"}
-        )
-        assert response.status_code == 201
+        async with sessions.begin() as session:
+            company = Company(user_id=owner_ids[1], name="Other company")
+            session.add(company)
         response = await api_client.patch(
-            f"/contacts/{saved_contact.id}", json={"company_id": response.json()["id"]}
+            f"/contacts/{saved_contact.id}", json={"company_id": str(company.id)}
         )
     assert response.status_code == 400
     async with sessions() as session:
@@ -175,7 +178,7 @@ async def test_contact_invalid_patch_returns_422(api_client, saved_contact, payl
     ],
 )
 async def test_contact_service_failure_returns_500(
-    api_client, owner_ids, monkeypatch, method, path, service_method
+    api_client, owner_ids, saved_contact, monkeypatch, method, path, service_method
 ):
     failure = ContactServiceError("Storage unavailable")
     mocked_operation = AsyncMock(side_effect=failure)
@@ -188,7 +191,7 @@ async def test_contact_service_failure_returns_500(
         payload = None
     response = await api_client.request(
         method,
-        path.format(id=uuid4()),
+        path.format(id=saved_contact.id),
         params={"user_id": str(owner_ids[0])},
         json=payload,
     )
@@ -198,9 +201,11 @@ async def test_contact_service_failure_returns_500(
 
 
 # An unexpected programming error remains visible instead of becoming a handled contact error.
-async def test_contact_api_does_not_swallow_programming_errors(api_client, monkeypatch):
+async def test_contact_api_does_not_swallow_programming_errors(
+    api_client, saved_contact, monkeypatch
+):
     mocked_get = AsyncMock(side_effect=TypeError("Unexpected programming error"))
     monkeypatch.setattr(ContactService, "get_contact", mocked_get)
     with pytest.raises(TypeError, match="Unexpected programming error"):
-        await api_client.get(f"/contacts/{uuid4()}")
+        await api_client.get(f"/contacts/{saved_contact.id}")
     mocked_get.assert_awaited_once()

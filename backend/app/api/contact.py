@@ -1,9 +1,6 @@
-"""Contact endpoints with request-owned transactions.
+"""Authenticated contact endpoints with owner-scoped access."""
 
-List queries filter by user ID. Individual operations do not authenticate callers or check
-ownership.
-"""
-
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,9 +14,13 @@ from starlette.status import (
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 
+from app.api.ownership import require_owned_resource, validate_supplied_owner
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.contact import Contact
+from app.models.user import User
 from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate
+from app.schemas.resource_requests import ContactCreateRequest
 from app.services.contact import ContactService
 from app.services.exceptions.contact import (
     ContactCompanyError,
@@ -33,13 +34,14 @@ router: APIRouter = APIRouter(prefix="/contacts", tags=["contacts"])
 
 @router.get("/", response_model=list[ContactRead])
 async def get_all_contacts(
-    user_id: UUID, db: AsyncSession = Depends(get_db)
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[Contact]:
-    """List an existing user's contacts, ordered by name and UUID."""
+    """List the signed-in user's contacts, ordered by name and UUID."""
     async with db.begin():
         contact_service: ContactService = ContactService(db)
         try:
-            return await contact_service.get_all_contacts(user_id)
+            return await contact_service.get_all_contacts(current_user.id)
         except UserNotFoundError as exc:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(exc))
         except (ContactServiceError, UserServiceError) as exc:
@@ -49,9 +51,14 @@ async def get_all_contacts(
 
 
 @router.get("/{id}", response_model=ContactRead)
-async def get_contact(id: UUID, db: AsyncSession = Depends(get_db)) -> Contact:
-    """Retrieve a contact by UUID."""
+async def get_contact(
+    id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Contact:
+    """Retrieve a contact by UUID after checking the signed-in user's ownership."""
     async with db.begin():
+        await require_owned_resource(db, Contact, id, current_user.id)
         contact_service: ContactService = ContactService(db)
         try:
             return await contact_service.get_contact(id)
@@ -65,13 +72,19 @@ async def get_contact(id: UUID, db: AsyncSession = Depends(get_db)) -> Contact:
 
 @router.post("/", response_model=ContactRead, status_code=HTTP_201_CREATED)
 async def create_contact(
-    new_contact: ContactCreate, db: AsyncSession = Depends(get_db)
+    new_contact: ContactCreateRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> Contact:
-    """Create a contact, optionally linked to a company owned by the same user."""
+    """Create a contact for the signed-in user, optionally linked to their company."""
+    validate_supplied_owner(new_contact.user_id, current_user.id)
+    service_data = new_contact.model_dump()
+    service_data["user_id"] = current_user.id
+    service_input = ContactCreate.model_validate(service_data)
     async with db.begin():
         contact_service: ContactService = ContactService(db)
         try:
-            return await contact_service.create_contact(new_contact)
+            return await contact_service.create_contact(service_input)
         except UserNotFoundError as exc:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(exc))
         except ContactCompanyError as exc:
@@ -86,7 +99,10 @@ async def create_contact(
 
 @router.patch("/{id}", response_model=ContactRead)
 async def update_contact(
-    id: UUID, contact_data: ContactUpdate, db: AsyncSession = Depends(get_db)
+    id: UUID,
+    contact_data: ContactUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> Contact:
     """Apply supplied changes; omitted fields remain unchanged.
 
@@ -94,6 +110,7 @@ async def update_contact(
     contact owner.
     """
     async with db.begin():
+        await require_owned_resource(db, Contact, id, current_user.id)
         contact_service: ContactService = ContactService(db)
         try:
             return await contact_service.update_contact(id, contact_data)
@@ -110,9 +127,14 @@ async def update_contact(
 
 
 @router.delete("/{id}", status_code=HTTP_204_NO_CONTENT)
-async def delete_contact(id: UUID, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_contact(
+    id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> None:
     """Delete a contact and its role associations while retaining the linked roles."""
     async with db.begin():
+        await require_owned_resource(db, Contact, id, current_user.id)
         contact_service: ContactService = ContactService(db)
         try:
             await contact_service.delete_contact(id)

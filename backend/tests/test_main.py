@@ -37,7 +37,7 @@ def test_openapi_registers_crud_routes_and_schemas(path, model):
         collection["post"]["requestBody"]["content"]["application/json"]["schema"][
             "$ref"
         ]
-        == f"#/components/schemas/{model}Create"
+        == f"#/components/schemas/{model}{'CreateRequest' if model != 'Event' else 'Create'}"
     )
     assert (
         collection["post"]["responses"]["201"]["content"]["application/json"]["schema"][
@@ -61,6 +61,22 @@ def test_occurrence_time_is_a_query_parameter(path):
     )
     assert parameter["in"] == "query"
     assert parameter["required"] is False
+
+
+def test_openapi_documents_csrf_header_for_authenticated_writes():
+    for path, operations in app.openapi()["paths"].items():
+        if path in {"/auth/register", "/auth/login"}:
+            continue
+        for method, operation in operations.items():
+            if method not in {"post", "patch", "put", "delete"}:
+                continue
+            header = next(
+                parameter
+                for parameter in operation.get("parameters", [])
+                if parameter["name"] == "X-CSRF-Token"
+            )
+            assert header["in"] == "header", (method, path)
+            assert header["required"] is False, (method, path)
 
 
 @pytest.mark.parametrize("path", ["/auth/register", "/auth/login"])

@@ -174,6 +174,10 @@ async def test_failed_login_uses_same_generic_error(
     [
         "/auth/me",
         "/auth/sessions",
+        "/companies/",
+        "/contacts/",
+        "/tracked-roles/",
+        "/events/",
         "/users/me",
     ],
 )

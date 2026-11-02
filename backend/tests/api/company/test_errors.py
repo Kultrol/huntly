@@ -58,7 +58,7 @@ async def test_company_invalid_request_returns_422(
     ],
 )
 async def test_company_service_failure_returns_500(
-    api_client, owner_ids, monkeypatch, method, path, service_method
+    api_client, owner_ids, saved_company, monkeypatch, method, path, service_method
 ):
     failure = CompanyServiceError("Storage unavailable")
     mocked_operation = AsyncMock(side_effect=failure)
@@ -71,7 +71,7 @@ async def test_company_service_failure_returns_500(
         payload = None
     response = await api_client.request(
         method,
-        path.format(id=uuid4()),
+        path.format(id=saved_company.id),
         params={"user_id": str(owner_ids[0])},
         json=payload,
     )
@@ -81,9 +81,11 @@ async def test_company_service_failure_returns_500(
 
 
 # An unexpected programming error remains visible instead of becoming a handled company error.
-async def test_company_api_does_not_swallow_programming_errors(api_client, monkeypatch):
+async def test_company_api_does_not_swallow_programming_errors(
+    api_client, saved_company, monkeypatch
+):
     mocked_get = AsyncMock(side_effect=TypeError("Unexpected programming error"))
     monkeypatch.setattr(CompanyService, "get_company_by_id", mocked_get)
     with pytest.raises(TypeError, match="Unexpected programming error"):
-        await api_client.get(f"/companies/{uuid4()}")
+        await api_client.get(f"/companies/{saved_company.id}")
     mocked_get.assert_awaited_once()

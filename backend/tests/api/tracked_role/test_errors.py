@@ -39,17 +39,17 @@ async def test_role_api_invalid_merged_salary_returns_400_and_rolls_back(
 
 # An opportunity cannot be created with a company belonging to another user.
 async def test_role_api_rejects_other_owners_company(
-    api_client, owner_ids, saved_company
+    client_factory, owner_ids, saved_company
 ):
-    response = await api_client.post(
-        "/tracked-roles/",
-        json={
-            "user_id": str(owner_ids[1]),
-            "title": "Rejected",
-            "status": "saved",
-            "company_id": str(saved_company.id),
-        },
-    )
+    async with client_factory(owner_ids[1]) as client:
+        response = await client.post(
+            "/tracked-roles/",
+            json={
+                "title": "Rejected",
+                "status": "saved",
+                "company_id": str(saved_company.id),
+            },
+        )
     assert response.status_code == 400
 
 
@@ -112,7 +112,7 @@ async def test_role_occurred_at_must_be_valid_query_datetime(
     ],
 )
 async def test_tracked_role_service_failure_returns_500(
-    api_client, owner_ids, monkeypatch, method, path, service_method
+    api_client, owner_ids, saved_role, monkeypatch, method, path, service_method
 ):
     failure = TrackedRoleServiceError("Storage unavailable")
     mocked_operation = AsyncMock(side_effect=failure)
@@ -129,7 +129,7 @@ async def test_tracked_role_service_failure_returns_500(
         payload = None
     response = await api_client.request(
         method,
-        path.format(id=uuid4()),
+        path.format(id=saved_role.id),
         params={"user_id": str(owner_ids[0])},
         json=payload,
     )
@@ -141,10 +141,10 @@ async def test_tracked_role_service_failure_returns_500(
 # An unexpected programming error remains visible instead of becoming a handled opportunity
 # error.
 async def test_tracked_role_api_does_not_swallow_programming_errors(
-    api_client, monkeypatch
+    api_client, saved_role, monkeypatch
 ):
     mocked_get = AsyncMock(side_effect=TypeError("Unexpected programming error"))
     monkeypatch.setattr(TrackedRoleService, "get_tracked_role_by_id", mocked_get)
     with pytest.raises(TypeError, match="Unexpected programming error"):
-        await api_client.get(f"/tracked-roles/{uuid4()}")
+        await api_client.get(f"/tracked-roles/{saved_role.id}")
     mocked_get.assert_awaited_once()

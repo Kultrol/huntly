@@ -83,14 +83,14 @@ async def test_event_occurred_at_must_be_valid_query_datetime(api_client, saved_
     ],
 )
 async def test_event_service_failure_returns_500(
-    api_client, owner_ids, monkeypatch, method, path, service_method
+    api_client, owner_ids, saved_event, monkeypatch, method, path, service_method
 ):
     failure = EventServiceError("Storage unavailable")
     mocked_operation = AsyncMock(side_effect=failure)
     monkeypatch.setattr(EventService, service_method, mocked_operation)
     if method == "POST":
         payload = {
-            "tracked_role_id": str(uuid4()),
+            "tracked_role_id": str(saved_event.tracked_role_id),
             "title": "Interview",
             "event_date": "2026-01-01",
             "event_type": "interview",
@@ -102,8 +102,8 @@ async def test_event_service_failure_returns_500(
         payload = None
     response = await api_client.request(
         method,
-        path.format(id=uuid4()),
-        params={"tracked_role_id": str(uuid4())},
+        path.format(id=saved_event.id),
+        params={"tracked_role_id": str(saved_event.tracked_role_id)},
         json=payload,
     )
     assert response.status_code == 500
@@ -112,9 +112,11 @@ async def test_event_service_failure_returns_500(
 
 
 # An unexpected programming error remains visible instead of becoming a handled event error.
-async def test_event_api_does_not_swallow_programming_errors(api_client, monkeypatch):
+async def test_event_api_does_not_swallow_programming_errors(
+    api_client, saved_event, monkeypatch
+):
     mocked_get = AsyncMock(side_effect=TypeError("Unexpected programming error"))
     monkeypatch.setattr(EventService, "get_event", mocked_get)
     with pytest.raises(TypeError, match="Unexpected programming error"):
-        await api_client.get(f"/events/{uuid4()}")
+        await api_client.get(f"/events/{saved_event.id}")
     mocked_get.assert_awaited_once()

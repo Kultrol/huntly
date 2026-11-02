@@ -1,10 +1,7 @@
-"""Tracked-role endpoints with request-owned transactions.
-
-Role changes and history entries share a transaction. List queries filter by user ID;
-individual operations do not authenticate callers or check ownership.
-"""
+"""Authenticated tracked-role endpoints with owner-scoped access."""
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -17,8 +14,12 @@ from starlette.status import (
     HTTP_500_INTERNAL_SERVER_ERROR,
 )
 
+from app.api.ownership import require_owned_resource, validate_supplied_owner
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.tracked_role.tracked_role import TrackedRole
+from app.models.user import User
+from app.schemas.resource_requests import TrackedRoleCreateRequest
 from app.schemas.tracked_role import (
     TrackedRoleCreate,
     TrackedRoleRead,
@@ -37,13 +38,14 @@ router: APIRouter = APIRouter(prefix="/tracked-roles", tags=["tracked roles"])
 
 @router.get("/", response_model=list[TrackedRoleRead])
 async def get_tracked_roles(
-    user_id: UUID, db: AsyncSession = Depends(get_db)
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[TrackedRole]:
-    """List an existing user's tracked roles without guaranteed ordering."""
+    """List the signed-in user's tracked roles without guaranteed ordering."""
     async with db.begin():
         tracked_role_service: TrackedRoleService = TrackedRoleService(db)
         try:
-            return await tracked_role_service.get_all_tracked_roles(user_id)
+            return await tracked_role_service.get_all_tracked_roles(current_user.id)
         except UserNotFoundError as exc:
             raise HTTPException(
                 status_code=HTTP_404_NOT_FOUND, detail=str(exc)
@@ -55,9 +57,14 @@ async def get_tracked_roles(
 
 
 @router.get("/{id}", response_model=TrackedRoleRead)
-async def get_tracked_role(id: UUID, db: AsyncSession = Depends(get_db)) -> TrackedRole:
-    """Retrieve a tracked role by UUID."""
+async def get_tracked_role(
+    id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> TrackedRole:
+    """Retrieve a tracked role after checking the signed-in user's ownership."""
     async with db.begin():
+        await require_owned_resource(db, TrackedRole, id, current_user.id)
         tracked_role_service: TrackedRoleService = TrackedRoleService(db)
         try:
             return await tracked_role_service.get_tracked_role_by_id(id)
@@ -73,20 +80,25 @@ async def get_tracked_role(id: UUID, db: AsyncSession = Depends(get_db)) -> Trac
 
 @router.post("/", response_model=TrackedRoleRead, status_code=HTTP_201_CREATED)
 async def create_tracked_role(
-    new_tracked_role: TrackedRoleCreate,
-    db: AsyncSession = Depends(get_db),
+    new_tracked_role: TrackedRoleCreateRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     occurred_at: datetime | None = None,
 ) -> TrackedRole:
-    """Create a tracked role and its initial status-history entry.
+    """Create a tracked role for the signed-in user and its initial history entry.
 
     Any linked company must share the owner. History uses the optional occurred_at query
     parameter, then applied_at for an applied role, then the current UTC time.
     """
+    validate_supplied_owner(new_tracked_role.user_id, current_user.id)
+    service_data = new_tracked_role.model_dump()
+    service_data["user_id"] = current_user.id
+    service_input = TrackedRoleCreate.model_validate(service_data)
     async with db.begin():
         tracked_role_service: TrackedRoleService = TrackedRoleService(db)
         try:
             return await tracked_role_service.create_tracked_role(
-                new_tracked_role, occurred_at=occurred_at
+                service_input, occurred_at=occurred_at
             )
         except UserNotFoundError as exc:
             raise HTTPException(
@@ -110,7 +122,8 @@ async def create_tracked_role(
 async def update_tracked_role(
     id: UUID,
     tracked_role_data: TrackedRoleUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     occurred_at: datetime | None = None,
 ) -> TrackedRole:
     """Apply supplied changes and record actual status transitions.
@@ -120,6 +133,7 @@ async def update_tracked_role(
     query parameter timestamps a new transition and defaults to the current UTC time.
     """
     async with db.begin():
+        await require_owned_resource(db, TrackedRole, id, current_user.id)
         tracked_role_service: TrackedRoleService = TrackedRoleService(db)
         try:
             return await tracked_role_service.update_tracked_role(
@@ -144,9 +158,14 @@ async def update_tracked_role(
 
 
 @router.delete("/{id}", status_code=HTTP_204_NO_CONTENT, response_class=Response)
-async def delete_tracked_role(id: UUID, db: AsyncSession = Depends(get_db)) -> Response:
+async def delete_tracked_role(
+    id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
     """Delete a role, its history, events, event history, and contact associations."""
     async with db.begin():
+        await require_owned_resource(db, TrackedRole, id, current_user.id)
         tracked_role_service: TrackedRoleService = TrackedRoleService(db)
         try:
             await tracked_role_service.delete_tracked_role(id)
