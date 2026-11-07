@@ -1,0 +1,77 @@
+.auth-dot-wave {
+  --dot-spacing: 22px;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--primary);
+  background: radial-gradient(
+    ellipse at 62% 39%,
+    color-mix(in oklab, currentColor 16%, transparent),
+    transparent 68%
+  );
+  mask-image: radial-gradient(
+    ellipse 77% 61% at 58% 43%,
+    black 27%,
+    rgb(0 0 0 / 65%) 65%,
+    transparent 100%
+  );
+}
+
+.auth-dot-wave::before,
+.auth-dot-wave__glow {
+  position: absolute;
+  inset: 0;
+}
+
+/* Keep a faint grid visible between waves. */
+.auth-dot-wave::before {
+  content: "";
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, currentColor 36%, transparent) 1px,
+    transparent 1.7px
+  ) center / var(--dot-spacing) var(--dot-spacing);
+}
+
+/* The mask reveals the moving gradient at fixed dot positions. */
+.auth-dot-wave__glow {
+  mask: radial-gradient(
+    circle,
+    black 1.15px,
+    rgb(0 0 0 / 55%) 2px,
+    rgb(0 0 0 / 20%) 3.5px,
+    transparent 5.5px
+  ) center / var(--dot-spacing) var(--dot-spacing);
+}
+
+.auth-dot-wave__glow::before {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background: repeating-radial-gradient(
+    ellipse at 14% 28%,
+    transparent 0px,
+    transparent 28px,
+    color-mix(in oklab, currentColor 24%, transparent) 62px,
+    currentColor 99px,
+    color-mix(in oklab, currentColor 38%, transparent) 124px,
+    transparent 179px
+  );
+  animation: auth-dot-wave-sweep 7s ease-in-out -3s infinite alternate;
+}
+
+@keyframes auth-dot-wave-sweep {
+  from {
+    transform: translate3d(-10%, -5%, 0);
+  }
+  to {
+    transform: translate3d(12%, 8%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-dot-wave__glow::before {
+    animation: none;
+  }
+}
