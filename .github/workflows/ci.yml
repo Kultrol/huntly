@@ -83,5 +83,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Check frontend logic
+        run: npm run lint && npm test
+
       - name: Build frontend
         run: npm run build

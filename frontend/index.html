@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Huntly</title>
+    <!-- Apply the theme before the first paint. ThemeProvider keeps it in sync after React mounts. -->
+    <script>
+      {
+        let theme;
+        try {
+          theme = localStorage.getItem("huntly-theme");
+        } catch {
+          theme = "system";
+        }
+        const dark = theme === "dark" ||
+          (theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

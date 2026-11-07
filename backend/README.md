@@ -138,7 +138,6 @@ settings and deployment limitations are documented in the
 | A write returns 403 | Send the current `X-CSRF-Token` and allow the browser's exact origin. |
 | Startup refuses a schema upgrade | Follow the [migration guide](docs/alembic-guide.md); legacy rows require an explicit conversion plan. |
 
-The existing frontend demo requests need login, cookie, and CSRF integration
-before they can use the protected API. Email verification, password recovery,
-and application-side authentication throttling are not implemented; see the
-authentication guide for the current scope.
+The [frontend](../frontend/README.md) uses the login, registration, and session
+endpoints. See the authentication guide for the current scope of email
+verification, password recovery, and application-side throttling.
