@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
-import { getHealth } from "./api/health";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/button";
+import { getHealth } from "@/api/health";
 
-function App() {
+function HomePage() {
   type BackendStatus = "loading" | "success" | "error";
 
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("loading");
@@ -27,8 +29,14 @@ function App() {
     );
   } else if (backendStatus === "success") {
     return (
-      <div>
-        <p>Backend Status: Online</p>
+      <div className="m-2">
+        <p className="mb-2">Backend Status: Online</p>
+        <Button>
+          <Link to="/login">Login In</Link>
+        </Button>
+        <Button>
+          <Link to="/register">Register</Link>
+        </Button>
       </div>
     );
   } else {
@@ -40,4 +48,4 @@ function App() {
   }
 }
 
-export default App;
+export default HomePage;
