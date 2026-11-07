@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: huntly-site
+    runtime: static
+    branch: master
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    autoDeployTrigger: commit
+    previews:
+      generation: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: "24.22.2"
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+      - key: VITE_API_URL
+        value: /api
+    routes:
+      # Route API requests before the fallback for client-side navigation.
+      - type: rewrite
+        source: /api/*
+        destination: https://huntly-v4bm.onrender.com/*
+      - type: rewrite
+        source: /*
+        destination: /index.html

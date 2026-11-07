@@ -258,9 +258,9 @@ After a page reload, restore identity and CSRF state with `GET /auth/me` and
 clear the client-side account and CSRF state. Use the newly returned token after
 a later login; a previous session's token is no longer valid for it.
 
-The frontend's current demo-user requests do not implement these login,
-cookie, and CSRF steps. They must be wired to this flow before using protected
-resource routes.
+The [frontend](../../frontend/README.md#authentication) implements this flow in
+its session provider. New protected screens can use the provider's request helper
+to send the current session's CSRF token.
 
 ## Reading the implementation
 
