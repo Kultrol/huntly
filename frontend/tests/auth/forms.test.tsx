@@ -3,11 +3,12 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it } from "vitest";
 import AppRoutes from "@/app/AppRoutes";
 import AuthProvider from "@/features/auth/session/AuthProvider";
-import { createDeferredResponse, jsonResponse, mockApiFetch, signedInSession } from "./fixtures";
+import { ThemeProvider } from "@/theme/ThemeProvider";
+import { createDeferredResponse, jsonResponse, mockAuthFetchWithDashboard, signedInSession } from "./fixtures";
 
 const { email: accountEmailAddress, name: accountDisplayName } = signedInSession.user;
 const validPassword = "correct password";
-const dashboardHeading = "Welcome Kevin to the dashboard";
+const dashboardHeading = "Welcome Kevin";
 
 /** Mount the production form, including the session check that allows guest access. */
 function renderGuestRoute(formPath: "/login" | "/register") {
@@ -17,6 +18,7 @@ function renderGuestRoute(formPath: "/login" | "/register") {
         <AppRoutes />
       </AuthProvider>
     </MemoryRouter>,
+    { wrapper: ThemeProvider },
   );
 }
 
@@ -27,10 +29,10 @@ function expectFieldToDescribeError(input: HTMLInputElement, inlineError: HTMLEl
 }
 
 describe("authentication forms", () => {
-  let fetchMock: ReturnType<typeof mockApiFetch>;
+  let fetchMock: ReturnType<typeof mockAuthFetchWithDashboard>;
 
   beforeEach(() => {
-    fetchMock = mockApiFetch();
+    fetchMock = mockAuthFetchWithDashboard();
   });
 
   // Accessible inline errors for malformed email on both auth forms
@@ -139,7 +141,7 @@ describe("authentication forms", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(submitButton);
 
-    await screen.findByRole("heading", { name: `Welcome ${maxLengthName} to the dashboard` });
+    await screen.findByRole("heading", { name: `Welcome ${maxLengthName}` });
     const [requestUrl, requestOptions] = fetchMock.mock.calls[1];
     expect(requestUrl).toBe("http://localhost:8000/auth/register");
     expect(JSON.parse(String(requestOptions?.body))).toMatchObject({ name: maxLengthName });

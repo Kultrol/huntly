@@ -29,3 +29,21 @@ export function mockApiFetch() {
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
+
+const dashboardPaths = new Set(["/tracked-roles/", "/companies/", "/contacts/"]);
+
+/** Keep dashboard reads separate from the auth requests asserted by route and form tests. */
+export function mockAuthFetchWithDashboard() {
+  const authFetch = vi.fn<typeof fetch>();
+  mockApiFetch().mockImplementation((input, options) => {
+    const path = new URL(String(input)).pathname;
+    if ((options?.method ?? "GET") === "GET" && path === "/events/upcoming") {
+      return Promise.resolve(jsonResponse({ user_id: signedInSession.user.id, events: [] }));
+    }
+    if ((options?.method ?? "GET") === "GET" && dashboardPaths.has(path)) {
+      return Promise.resolve(jsonResponse([]));
+    }
+    return authFetch(input, options);
+  });
+  return authFetch;
+}
