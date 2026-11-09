@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -7,7 +7,7 @@ from sqlalchemy.engine import ScalarResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enums import EventStatus
+from app.enums import EventStatus, EventType
 from app.models.tracked_role.event import TrackedRoleEvent
 from app.models.tracked_role.event_status_history import EventStatusHistory
 from app.models.tracked_role.tracked_role import TrackedRole
@@ -65,6 +65,40 @@ class EventService:
             return list(events)
         except SQLAlchemyError as exc:
             raise EventFetchingError("Failed to get events") from exc
+
+    async def get_upcoming_events(
+        self, user_id: UUID, from_date: date
+    ) -> list[TrackedRoleEvent]:
+        """Find the next five unresolved dashboard events across an owner's roles."""
+        stmt = (
+            select(TrackedRoleEvent)
+            .join(TrackedRoleEvent.tracked_role)
+            .where(
+                TrackedRole.user_id == user_id,
+                TrackedRoleEvent.event_date >= from_date,
+                TrackedRoleEvent.status.in_(
+                    (EventStatus.PENDING, EventStatus.SCHEDULED)
+                ),
+                TrackedRoleEvent.event_type.in_(
+                    (
+                        EventType.INTERVIEW,
+                        EventType.FOLLOW_UP,
+                        EventType.APPLICATION_DEADLINE,
+                        EventType.OFFER_DEADLINE,
+                    )
+                ),
+            )
+            .order_by(
+                TrackedRoleEvent.event_date,
+                TrackedRoleEvent.event_time.asc().nulls_last(),
+                TrackedRoleEvent.id,
+            )
+            .limit(5)
+        )
+        try:
+            return list(await self.db.scalars(stmt))
+        except SQLAlchemyError as exc:
+            raise EventFetchingError("Failed to get upcoming events") from exc
 
     async def create_event(
         self,

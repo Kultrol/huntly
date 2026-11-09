@@ -1,6 +1,6 @@
 """Authenticated event endpoints authorize access through the parent role."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -20,7 +20,7 @@ from app.core.database import get_db
 from app.models.tracked_role.event import TrackedRoleEvent
 from app.models.tracked_role.tracked_role import TrackedRole
 from app.models.user import User
-from app.schemas.event import EventCreate, EventRead, EventUpdate
+from app.schemas.event import EventCreate, EventRead, EventUpdate, UpcomingEventsRead
 from app.services.event import EventService
 from app.services.exceptions.event import EventNotFoundError, EventServiceError
 from app.services.exceptions.tracked_role import TrackedRoleNotFoundError
@@ -48,6 +48,27 @@ async def get_events(
             raise HTTPException(
                 status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
             ) from exc
+
+
+@router.get("/upcoming", response_model=UpcomingEventsRead)
+async def get_upcoming_events(
+    from_date: date,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UpcomingEventsRead:
+    """List the signed-in user's next five interviews, deadlines, and follow-ups."""
+    async with db.begin():
+        try:
+            events = await EventService(db).get_upcoming_events(
+                current_user.id, from_date
+            )
+        except EventServiceError as exc:
+            raise HTTPException(
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+            ) from exc
+        return UpcomingEventsRead.model_validate(
+            {"user_id": current_user.id, "events": events}
+        )
 
 
 @router.get("/{id}", response_model=EventRead)
