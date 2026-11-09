@@ -40,6 +40,13 @@ class EventRead(BaseModel):
     updated_at: datetime
 
 
+class UpcomingEventsRead(BaseModel):
+    """Bind the upcoming events response to its authenticated owner."""
+
+    user_id: UUID
+    events: list[EventRead]
+
+
 class EventCreate(BaseModel):
     """Event input with a required date, category, and explicit status.
 

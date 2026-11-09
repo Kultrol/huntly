@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import AppRoutes from "@/app/AppRoutes";
 import { getAuthRedirect } from "@/features/auth/redirect";
 import AuthProvider from "@/features/auth/session/AuthProvider";
-import { createDeferredResponse, jsonResponse, mockApiFetch, signedInSession } from "./fixtures";
+import { ThemeProvider } from "@/theme/ThemeProvider";
+import { createDeferredResponse, jsonResponse, mockAuthFetchWithDashboard, signedInSession } from "./fixtures";
 
-const dashboardHeading = "Welcome Kevin to the dashboard";
+const dashboardHeading = "Welcome Kevin";
 const protectedDestination = "/dashboard?tab=events#today";
 
 /** Expose the router's URL and saved destination alongside the real screens. */
@@ -32,21 +33,22 @@ function renderAuthRoutes(initialEntry: InitialEntry) {
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
+    { wrapper: ThemeProvider },
   );
 }
 
 describe("authentication routes", () => {
-  let fetchMock: ReturnType<typeof mockApiFetch>;
+  let authFetch: ReturnType<typeof mockAuthFetchWithDashboard>;
 
   beforeEach(() => {
-    fetchMock = mockApiFetch();
+    authFetch = mockAuthFetchWithDashboard();
   });
 
   // Protected URL recovery across the sign-in and registration screens
   it("returns a signed-out visitor to the original dashboard URL after they switch forms and sign in", async () => {
     const initialSessionCheck = createDeferredResponse();
     const initialDocumentTitle = document.title;
-    fetchMock.mockReturnValueOnce(initialSessionCheck.promise)
+    authFetch.mockReturnValueOnce(initialSessionCheck.promise)
       .mockResolvedValueOnce(jsonResponse(signedInSession));
     renderAuthRoutes(protectedDestination);
 
@@ -88,7 +90,7 @@ describe("authentication routes", () => {
 
   // Dashboard entry after session restoration and navigation on logout success or failure
   it("redirects a signed-in visitor to the dashboard and returns to login when logout succeeds", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(signedInSession))
+    authFetch.mockResolvedValueOnce(jsonResponse(signedInSession))
       .mockResolvedValueOnce(jsonResponse({}, 403))
       .mockResolvedValueOnce(jsonResponse(signedInSession))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
@@ -102,17 +104,17 @@ describe("authentication routes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     expect((await screen.findByRole("alert")).textContent).not.toBe("");
     expect(screen.getByRole("heading", { name: dashboardHeading })).not.toBeNull();
-    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:8000/auth/me");
+    expect(authFetch.mock.calls[2]?.[0]).toBe("http://localhost:8000/auth/me");
     fireEvent.click(screen.getByRole("button", { name: "Logout" }));
 
     await screen.findByRole("heading", { name: "Sign in to Huntly" });
     expect(screen.getByTestId("current-url").textContent).toBe("/login");
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(authFetch).toHaveBeenCalledTimes(4);
   });
 
   // The 404 recovery action has one keyboard target with link semantics.
   it("renders a home link on an unknown route", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({}, 401));
+    authFetch.mockResolvedValueOnce(jsonResponse({}, 401));
     renderAuthRoutes("/unknown");
 
     const recoveryLink = await screen.findByRole("link", { name: "Return to Home Page" });
