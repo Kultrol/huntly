@@ -27,6 +27,8 @@ Start a new product feature in `src/features/` and register its pages in `src/ap
 
 ## Authentication
 
+The homepage shares the auth layout and waits for the existing session check before showing sign-in and registration links. During a cold start it explains the wait, updates its message after 15 seconds, and retries failed checks every 3 seconds. After 2 minutes it stops automatic retries and offers **Try again**. A pending request is allowed to finish; session requests still have the shared 60-second timeout. Leaving the homepage clears its timers, while `AuthProvider` continues to own session requests. The loader respects reduced-motion preferences and announces status changes.
+
 `AuthProvider` restores the browser session through `GET /auth/me` at startup. Use `useAuth()` under the provider for `user`, `csrfToken`, `status`, `isPending`, and the actions `signIn`, `signUp`, `signOut`, and `refreshSession`. Pages do not set account/token state directly. Successful registration signs the user in.
 
 The provider keeps the account and CSRF token together in memory. The backend owns the HttpOnly session cookie; neither passwords nor auth data are saved in browser storage. Other tabs receive only an opaque session-change marker and retrieve their own account/token from the backend. Focus and visibility changes also revalidate the shared cookie.
