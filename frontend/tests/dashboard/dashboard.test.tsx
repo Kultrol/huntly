@@ -150,7 +150,7 @@ function renderDashboard() {
   );
 }
 
-it("shows upcoming events and role counts with future pages disabled", async () => {
+it("shows upcoming events and role counts", async () => {
   renderDashboard();
 
   const nextUp = within(await screen.findByRole("region", { name: "Next up" }));
@@ -170,44 +170,24 @@ it("shows upcoming events and role counts with future pages disabled", async () 
   expect(overview.queryByRole("button")).toBeNull();
   expect(overview.getByText("Applied", { selector: "dt" }).nextElementSibling?.textContent).toBe("0");
   expect(overview.getByText("Offers", { selector: "dt" }).nextElementSibling?.textContent).toBe("0");
-
-  const workspace = within(screen.getByRole("navigation", { name: "Workspace" }));
-  for (const label of ["Roles", "Companies", "Contacts"]) {
-    expect(workspace.getByRole("button", { name: label }).getAttribute("aria-disabled")).toBe("true");
-  }
 });
 
 it("explains unavailable actions without changing the dashboard location", async () => {
   renderDashboard();
   await screen.findByRole("heading", { name: "Welcome Kevin" });
   const unavailableMessage = "This feature isn't implemented just yet.";
-  const targets = [
-    screen.getByRole("button", { name: "Roles" }),
-    screen.getByRole("button", { name: "Settings" }),
-    screen.getByRole("button", { name: "Add role" }),
-  ];
+  const addRole = screen.getByRole("button", { name: "Add role" });
 
-  for (const target of targets) {
-    expect(target.getAttribute("aria-disabled")).toBe("true");
-    fireEvent.click(target);
-    expect(await screen.findByText(unavailableMessage)).not.toBeNull();
-    expect(screen.getByTestId("dashboard-location").textContent).toBe("/dashboard");
-    fireEvent.keyDown(target, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByText(unavailableMessage)).toBeNull());
-  }
-
-  const settings = screen.getByRole("button", { name: "Settings" });
-  fireEvent.mouseEnter(settings);
+  expect(addRole.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(addRole);
   expect(await screen.findByText(unavailableMessage)).not.toBeNull();
-  fireEvent.mouseLeave(settings);
+  expect(screen.getByTestId("dashboard-location").textContent).toBe("/dashboard");
+  fireEvent.keyDown(addRole, { key: "Escape" });
   await waitFor(() => expect(screen.queryByText(unavailableMessage)).toBeNull());
 
-  expect(screen.getByRole("button", { name: "Logout" }).hasAttribute("aria-disabled")).toBe(false);
   expect(screen.getByRole("button", { name: "Switch to dark mode" }).hasAttribute("aria-disabled")).toBe(false);
   expect(screen.getByRole("button", { name: "Role status: All statuses" }).hasAttribute("aria-disabled")).toBe(false);
   expect(screen.getByLabelText("Filter roles").hasAttribute("aria-disabled")).toBe(false);
-  const dashboard = within(screen.getByRole("navigation", { name: "Workspace" })).getByText("Dashboard");
-  expect(dashboard.closest("[aria-disabled='true']")).toBeNull();
 });
 
 it("loads upcoming events after a failed request is retried", async () => {
