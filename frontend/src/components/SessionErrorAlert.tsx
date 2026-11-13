@@ -1,6 +1,6 @@
 interface SessionErrorAlertProps {
-  logoutError: string;
-  sessionError: string;
+  logoutError: string | null;
+  sessionError: string | null;
 }
 
 export default function SessionErrorAlert({
