@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/theme/useTheme";
 
 /** The label names the theme the click will turn on. */
-export function DashboardThemeToggle({ className }: { className?: string }) {
+export function ThemeToggleButton({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
   const nextTheme = isDark ? "light" : "dark";
