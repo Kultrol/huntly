@@ -1,4 +1,12 @@
-export default function ({ logoutError, sessionError }) {
+interface SessionErrorAlertProps {
+  logoutError: string;
+  sessionError: string;
+}
+
+export default function SessionErrorAlert({
+  logoutError,
+  sessionError,
+}: SessionErrorAlertProps) {
   return (
     <>
       {(logoutError || sessionError) && (

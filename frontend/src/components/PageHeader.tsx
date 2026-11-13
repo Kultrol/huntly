@@ -1,7 +1,11 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggleButton } from "@/theme/ThemeToggleButton";
 
-export default function PageHeader({ pageName }) {
+interface PageHeaderProps {
+  pageName: string;
+}
+
+export default function PageHeader({ pageName }: PageHeaderProps) {
   return (
     <header className="flex h-14 items-center gap-3 border-b bg-card/70 px-4 md:px-6">
       <SidebarTrigger className="size-8" />

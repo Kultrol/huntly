@@ -7,8 +7,19 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import UnavailableSidebarItem from "./UnavailableSideBarItem";
+import type { AuthUser } from "@/features/auth/api/types";
 
-export default function ({ user, isLoggingOut, onLogout }) {
+interface HuntlySideBarFooterProps {
+  user: AuthUser;
+  onLogout: () => void;
+  isLoggingOut: boolean;
+}
+
+export default function HuntlySideBarFooter({
+  user,
+  isLoggingOut,
+  onLogout,
+}: HuntlySideBarFooterProps) {
   const { setOpenMobile } = useSidebar();
 
   function handleLogout() {
