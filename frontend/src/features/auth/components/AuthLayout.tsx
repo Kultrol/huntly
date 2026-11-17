@@ -6,8 +6,8 @@ import { AuthDotWave } from "./AuthDotWave";
 /** Shares the welcome/auth shell; nested routes supply the form by default. */
 export function AuthLayout({ children, aside }: { children?: ReactNode; aside?: ReactNode }) {
   return (
-    <main className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex min-w-0 flex-col gap-6 px-6 py-6 sm:px-10 sm:py-8">
+    <main className="mx-auto grid min-h-svh max-w-[calc(var(--workspace-content-width)+8rem)] lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-6 page-gutters py-6 sm:py-8">
         <header className="flex">
           <Link
             to="/"

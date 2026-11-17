@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router";
-import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 
 type AvailableSideBarItemProps = {
   label: string;
@@ -15,6 +15,7 @@ export default function AvailableSideBarItem({
   route,
   current,
 }: AvailableSideBarItemProps) {
+  const { setOpenMobile } = useSidebar();
   return (
     <SidebarMenuItem>
       {current ? (
@@ -29,7 +30,7 @@ export default function AvailableSideBarItem({
         </SidebarMenuButton>
       ) : (
         <SidebarMenuButton
-          render={<Link to={route} />}
+          render={<Link to={route} onClick={() => setOpenMobile(false)} />}
           className="h-11 rounded-lg px-3 font-semibold text-muted-foreground hover:cursor-pointer"
         >
           <Icon aria-hidden="true" />

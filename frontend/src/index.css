@@ -50,6 +50,10 @@
 }
 
 :root {
+    --workspace-content-width: 80rem;
+    --control-height: 2.5rem;
+    --control-compact-height: 2rem;
+    --touch-target: 2.75rem;
     color-scheme: light;
     --background: #faf9fd;
     --foreground: #1c142a;
@@ -83,6 +87,96 @@
     --sidebar-accent-foreground: var(--accent-foreground);
     --sidebar-border: var(--border);
     --sidebar-ring: var(--ring);
+}
+
+/* Shared layout rules. Navigation stays beside the work area on ultrawide screens. */
+@layer components {
+  :root { --page-gutter: 1rem; }
+  .workspace-shell {
+    --workspace-nav-width: 0rem;
+    --workspace-sidebar-width: 14rem;
+    max-width: calc(var(--workspace-content-width) + var(--page-gutter) * 2 + var(--workspace-nav-width));
+    margin-inline: auto;
+  }
+
+  .page-gutters { padding-inline: var(--page-gutter); }
+
+  .dialog-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .form-body {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1rem;
+  }
+
+  .form-actions {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--muted);
+    padding: 1rem;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* In landscape or above a keyboard, let the whole form scroll together. */
+  .form-dialog[data-short-viewport] .dialog-form { flex: none; min-height: auto; }
+  .form-dialog[data-short-viewport] .form-body { flex: none; overflow: visible; }
+
+  @media (height < 30rem) {
+    .form-dialog .dialog-form { flex: none; min-height: auto; }
+    .form-dialog .form-body { flex: none; overflow: visible; }
+  }
+
+  @media (width >= 40rem) {
+    :root { --page-gutter: 1.5rem; }
+  }
+
+  @media (width >= 48rem) {
+    .workspace-shell[data-state="expanded"] { --workspace-nav-width: var(--sidebar-width); }
+  }
+
+  @media (width >= 64rem) {
+    :root { --page-gutter: 2rem; }
+    .workspace-shell { --workspace-sidebar-width: 15rem; }
+  }
+}
+
+@utility page-title {
+  @apply text-2xl font-semibold tracking-tight wrap-anywhere sm:text-3xl;
+}
+
+@utility section-title {
+  @apply text-base font-semibold tracking-tight;
+}
+
+@utility reading-width { max-width: 65ch; }
+
+/* Touch targets keep their minimum size even when a compact utility is used. */
+@media (any-pointer: coarse) {
+  [data-slot="button"], [data-slot="input"], [data-slot="select-trigger"],
+  [data-slot="select-item"], [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-radio-item"], [data-slot="tabs-trigger"],
+  [data-slot="sidebar-trigger"], [data-slot="dialog-close"],
+  [data-slot="sheet-close"], [data-slot="dropdown-menu-trigger"],
+  .touch-target {
+    min-height: var(--touch-target);
+    min-width: var(--touch-target);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 :root.dark {

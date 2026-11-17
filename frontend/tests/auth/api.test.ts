@@ -239,36 +239,50 @@ describe("authentication API", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    // Caller cancellation on browsers with and without native signal composition
-    it.each(["native signal composition", "the compatibility fallback"])(
-      "preserves the cancellation reason using %s",
-      async (signalSupport) => {
-        if (signalSupport === "the compatibility fallback") {
-          vi.stubGlobal("AbortSignal", { timeout: AbortSignal.timeout.bind(AbortSignal) });
-        }
-        const cancellationController = new AbortController();
-        const cancellationReason = new DOMException("Session check was superseded.", "AbortError");
-        // Leave the request pending until fetch receives the abort.
-        fetchMock.mockImplementationOnce((_requestUrl, requestOptions) => {
-          return new Promise((_resolveResponse, rejectResponse) => {
-            const requestSignal = requestOptions?.signal;
-            requestSignal?.addEventListener("abort", () => rejectResponse(requestSignal.reason));
-          });
+    it("preserves the cancellation reason through native signal composition", async () => {
+      const cancellationController = new AbortController();
+      const cancellationReason = new DOMException("Session check was superseded.", "AbortError");
+      // Leave the request pending until fetch receives the abort.
+      fetchMock.mockImplementationOnce((_requestUrl, requestOptions) => {
+        return new Promise((_resolveResponse, rejectResponse) => {
+          const requestSignal = requestOptions?.signal;
+          requestSignal?.addEventListener("abort", () => rejectResponse(requestSignal.reason), { once: true });
         });
+      });
 
-        const pendingSessionRequest = getSession(cancellationController.signal);
-        cancellationController.abort(cancellationReason);
+      const pendingSessionRequest = getSession(cancellationController.signal);
+      cancellationController.abort(cancellationReason);
 
-        await expect(pendingSessionRequest).rejects.toBe(cancellationReason);
-      },
-    );
+      await expect(pendingSessionRequest).rejects.toBe(cancellationReason);
+    });
 
-    // The fallback keeps the timeout connected while the body is being read
-    it("still times out after receiving session headers when AbortSignal.any is unavailable", async () => {
+    it.each([
+      { description: "with caller cancellation", callerSignal: new AbortController().signal },
+      { description: "without caller cancellation", callerSignal: undefined },
+    ])("times out a pending request after 60 seconds $description", async ({ callerSignal }) => {
+      const timeoutController = new AbortController();
+      // Trigger the timeout deterministically while keeping AbortSignal.any native.
+      const createTimeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
+      fetchMock.mockImplementationOnce((_requestUrl, requestOptions) => {
+        return new Promise((_resolveResponse, rejectResponse) => {
+          const requestSignal = requestOptions?.signal;
+          requestSignal?.addEventListener("abort", () => rejectResponse(requestSignal.reason), { once: true });
+        });
+      });
+
+      const pendingSessionRequest = getSession(callerSignal);
+      expect(createTimeout).toHaveBeenCalledWith(60_000);
+      timeoutController.abort(new DOMException("Request timed out.", "TimeoutError"));
+
+      await expect(pendingSessionRequest).rejects.toThrow("The server took too long to respond. Please try again.");
+      expect(callerSignal?.aborted).not.toBe(true);
+    });
+
+    it("keeps the native combined timeout active while reading the session body", async () => {
       const cancellationController = new AbortController();
       const timeoutController = new AbortController();
       const timeoutReason = new DOMException("Body timed out.", "TimeoutError");
-      vi.stubGlobal("AbortSignal", { timeout: () => timeoutController.signal });
+      vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
       const sessionResponse = jsonResponse(sessionWithNullableEmail);
       fetchMock.mockImplementationOnce(async (_requestUrl, requestOptions) => {
         vi.spyOn(sessionResponse, "json").mockImplementationOnce(async () => {

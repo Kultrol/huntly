@@ -141,3 +141,52 @@ async def test_upcoming_events_identifies_owner_when_the_list_is_empty(
     )
     assert response.status_code == 200
     assert response.json() == {"user_id": str(owner_ids[0]), "events": []}
+
+
+async def test_upcoming_events_can_include_all_types(
+    api_client, sessions, owner_ids, saved_role, saved_event
+):
+    async with sessions.begin() as session:
+        foreign_role = TrackedRole(
+            user_id=owner_ids[1], title="Foreign role", status="saved"
+        )
+        session.add(foreign_role)
+        await session.flush()
+        assessment = TrackedRoleEvent(
+            tracked_role_id=saved_role.id,
+            title="Assessment",
+            event_type="assessment",
+            event_date=date(2026, 10, 21),
+            status="pending",
+        )
+        session.add_all([
+            assessment,
+            TrackedRoleEvent(
+                tracked_role_id=foreign_role.id,
+                title="Foreign assessment",
+                event_type="assessment",
+                event_date=date(2026, 10, 20),
+                status="scheduled",
+            ),
+            TrackedRoleEvent(
+                tracked_role_id=saved_role.id,
+                title="Completed assessment",
+                event_type="assessment",
+                event_date=date(2026, 10, 20),
+                status="completed",
+            ),
+        ])
+
+    response = await api_client.get(
+        "/events/upcoming",
+        params={"from_date": "2026-10-20", "include_all_types": "true"},
+    )
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["events"]] == [
+        str(saved_event.id), str(assessment.id)
+    ]
+
+    default_response = await api_client.get(
+        "/events/upcoming", params={"from_date": "2026-10-20"}
+    )
+    assert default_response.json()["events"] == []

@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
 import {
   BriefcaseBusiness,
   Building2,
@@ -6,13 +7,10 @@ import {
   ContactRound,
   type LucideIcon,
 } from "lucide-react";
-import { getErrorMessage } from "@/api/client";
+import { WorkspaceLayout } from "@/components/WorkspaceLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/features/auth/session/useAuth";
 import { DashboardRecords } from "@/features/dashboard/DashboardRecords";
-import { SideBar } from "@/components/sidebar/SideBar";
 import { NextUpCard } from "@/features/dashboard/NextUpCard";
 import {
   useDashboardRecords,
@@ -20,9 +18,6 @@ import {
   type DashboardRole,
 } from "@/features/dashboard/useDashboardRecords";
 import { cn } from "@/lib/utils";
-import PageHeader from "../../components/PageHeader";
-import SessionErrorAlert from "../../components/SessionErrorAlert";
-import PageContainer from "../../components/PageContainer";
 
 // Summary words for the roles card. These are not the tracker status names
 // ("Interview", "Offer") and must stay separate from that map.
@@ -37,6 +32,7 @@ type OverviewCardProps = {
   description: string;
   icon: LucideIcon;
   dataset: DashboardDataset<unknown>;
+  to?: string;
   className?: string;
   children?: ReactNode;
 };
@@ -46,6 +42,7 @@ function OverviewCard({
   description,
   icon: Icon,
   dataset,
+  to,
   className,
   children,
 }: OverviewCardProps) {
@@ -55,16 +52,16 @@ function OverviewCard({
   return (
     <Card
       className={cn(
-        "relative min-w-0 py-3 text-left transition-colors hover:cursor-pointer hover:bg-accent/40 sm:py-4",
+        "relative min-w-0 py-4 text-left transition-colors",
+        to && "hover:bg-accent/40",
         className,
       )}
     >
-      <ChevronRight
-        aria-hidden="true"
-        className="absolute top-3 right-2.5 size-4 text-muted-foreground md:hidden"
-      />
+      {to && (
+        <ChevronRight aria-hidden="true" className="absolute top-3 right-2.5 size-4 text-muted-foreground" />
+      )}
       <CardContent className="px-2.5 sm:px-4">
-        <div className="flex flex-col items-start gap-2 @lg:flex-row @lg:items-center @lg:gap-3">
+        <div className="flex flex-col items-start gap-2 @lg/workspace:flex-row @lg/workspace:items-center @lg/workspace:gap-3">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground sm:size-9">
             <Icon aria-hidden="true" className="size-4 sm:size-5" />
           </span>
@@ -79,11 +76,18 @@ function OverviewCard({
             <span className="sr-only"> Count unavailable</span>
           )}
         </p>
-        <p className="mt-0.5 hidden text-xs text-muted-foreground @lg:block">
+        <p className="mt-0.5 hidden text-xs text-muted-foreground @lg/workspace:block">
           {description}
         </p>
         {children}
       </CardContent>
+      {to && (
+        <Link
+          to={to}
+          aria-label={`View ${label.toLowerCase()}`}
+          className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        />
+      )}
     </Card>
   );
 }
@@ -104,113 +108,83 @@ function RoleBreakdown({ roles }: { roles: DashboardRole[] }) {
 }
 
 export default function DashboardPage() {
-  const { user, signOut, isPending, error: sessionError } = useAuth();
-  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const { user, csrfToken } = useAuth();
   const records = useDashboardRecords();
-
-  async function handleLogout() {
-    setLogoutError(null);
-    try {
-      await signOut();
-    } catch (error) {
-      setLogoutError(getErrorMessage(error));
-    }
-  }
-
-  // The route guard redirects when a session ends.
   if (!user) return null;
 
   return (
-    <TooltipProvider>
-      <SidebarProvider className="[--sidebar-width:14rem]! lg:[--sidebar-width:15rem]!">
-        {/* Logout is the only session action on this page. */}
-        <SideBar
-          user={user}
-          onLogout={handleLogout}
-          isLoggingOut={isPending}
-          pageName={"dashboard"}
+    <WorkspaceLayout page="dashboard" title="Dashboard">
+      <section
+        aria-labelledby="dashboard-heading"
+        className="relative isolate overflow-hidden rounded-xl border bg-linear-to-br from-accent via-card to-card px-5 py-6 sm:px-7 sm:py-8"
+      >
+        <div
+          className="pointer-events-none absolute -top-30 -right-8 -z-10 size-64 rounded-full border border-primary/10 shadow-[0_0_0_2rem_var(--color-primary-soft)] [--color-primary-soft:color-mix(in_srgb,var(--primary)_4%,transparent)]"
+          aria-hidden="true"
         />
-        <main className="min-w-0 flex-1 bg-background">
-          <PageHeader pageName={"Dashboard"} />
+        <p className="text-xs font-semibold tracking-widest text-accent-foreground uppercase">
+          Job search workspace
+        </p>
+        <h1
+          id="dashboard-heading"
+          className="mt-2 page-title"
+        >
+          Welcome {user.name}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          See your roles, companies, and contacts at a glance.
+        </p>
+      </section>
 
-          <PageContainer>
-            <SessionErrorAlert
-              sessionError={sessionError}
-              logoutError={logoutError}
-            />
-            <section
-              aria-labelledby="dashboard-heading"
-              className="relative isolate overflow-hidden rounded-xl border bg-linear-to-br from-accent via-card to-card px-5 py-6 sm:px-7 sm:py-8"
-            >
-              <div
-                className="pointer-events-none absolute -top-30 -right-8 -z-10 size-64 rounded-full border border-primary/10 shadow-[0_0_0_2rem_var(--color-primary-soft)] [--color-primary-soft:color-mix(in_srgb,var(--primary)_4%,transparent)]"
-                aria-hidden="true"
-              />
-              <p className="text-xs font-semibold tracking-widest text-accent-foreground uppercase">
-                Job search workspace
-              </p>
-              <h1
-                id="dashboard-heading"
-                className="mt-2 text-3xl font-semibold tracking-tight wrap-anywhere sm:text-4xl"
-              >
-                Welcome {user.name}
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                See your roles, companies, and contacts at a glance.
-              </p>
-            </section>
+      <NextUpCard
+        events={records.upcomingEvents}
+        roles={records.roles.records}
+        onRetry={() => records.retry("upcomingEvents")}
+      />
 
-            <NextUpCard
-              events={records.upcomingEvents}
-              roles={records.roles.records}
-              onRetry={() => records.retry("upcomingEvents")}
-            />
+      <section aria-labelledby="overview-heading" className="space-y-3">
+        <h2
+          id="overview-heading"
+          className="section-title"
+        >
+          Overview
+        </h2>
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-4 @2xl/workspace:grid-cols-3">
+          <OverviewCard
+            label="Roles"
+            description="Opportunities you’re tracking"
+            icon={BriefcaseBusiness}
+            dataset={records.roles}
+            to="/roles"
+            className="col-span-2 @2xl/workspace:col-span-1"
+          >
+            {records.roles.status === "ready" && (
+              <RoleBreakdown roles={records.roles.records} />
+            )}
+          </OverviewCard>
+          <OverviewCard
+            label="Companies"
+            description="Organizations in your tracker"
+            icon={Building2}
+            dataset={records.companies}
+          />
+          <OverviewCard
+            label="Contacts"
+            description="People in your network"
+            icon={ContactRound}
+            dataset={records.contacts}
+          />
+        </div>
+      </section>
 
-            <section aria-labelledby="overview-heading" className="space-y-3">
-              <h2
-                id="overview-heading"
-                className="text-lg font-semibold tracking-tight"
-              >
-                Overview
-              </h2>
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-4 @2xl:grid-cols-3">
-                <OverviewCard
-                  label="Roles"
-                  description="Opportunities you’re tracking"
-                  icon={BriefcaseBusiness}
-                  dataset={records.roles}
-                  className="col-span-2 @2xl:col-span-1"
-                >
-                  {records.roles.status === "ready" && (
-                    <RoleBreakdown roles={records.roles.records} />
-                  )}
-                </OverviewCard>
-                <OverviewCard
-                  label="Companies"
-                  description="Organizations in your tracker"
-                  icon={Building2}
-                  dataset={records.companies}
-                />
-                <OverviewCard
-                  label="Contacts"
-                  description="People in your network"
-                  icon={ContactRound}
-                  dataset={records.contacts}
-                />
-              </div>
-            </section>
-
-            {/* Remount when the account changes so the previous filters do not carry over. */}
-            <DashboardRecords
-              key={user.id}
-              roles={records.roles}
-              companies={records.companies}
-              contacts={records.contacts}
-              retry={records.retry}
-            />
-          </PageContainer>
-        </main>
-      </SidebarProvider>
-    </TooltipProvider>
+      {/* Clear filters and open details when the signed-in session changes. */}
+      <DashboardRecords
+        key={`${user.id}:${csrfToken}`}
+        roles={records.roles}
+        companies={records.companies}
+        contacts={records.contacts}
+        retry={records.retry}
+      />
+    </WorkspaceLayout>
   );
 }
