@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Search } from "lucide-react";
+import { lazy, Suspense, useRef, useState } from "react";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,7 +12,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UnavailableAction } from "./UnavailableAction";
+import { EmptyState, LoadError, LoadingState } from "@/components/feedback/LoadState";
+import { UnavailableAction } from "@/components/feedback/UnavailableAction";
+import { useAuth } from "@/features/auth/session/useAuth";
+import { deleteRole, saveRole } from "@/features/roles/api";
+import type { RoleEditor } from "@/features/roles/RoleDialog";
+import { cn } from "@/lib/utils";
 import type {
   DashboardCompany,
   DashboardContact,
@@ -21,6 +26,10 @@ import type {
   DashboardRoleStatus,
   useDashboardRecords,
 } from "./useDashboardRecords";
+
+const RoleDialog = lazy(() => import("@/features/roles/RoleDialog").then((module) => ({
+  default: module.RoleDialog,
+})));
 
 type RoleStatusFilter = DashboardRoleStatus | "all";
 
@@ -52,10 +61,12 @@ type RecordsPanelProps<RecordType> = {
   dataset: DashboardDataset<RecordType>;
   getRoleStatus?: (record: RecordType) => DashboardRoleStatus;
   onRetry: () => void;
+  onOpen?: (record: RecordType, trigger: HTMLButtonElement) => void;
+  onCreate?: (trigger: HTMLButtonElement) => void;
 };
 
 function RecordsPanel<RecordType extends { id: string }>({
-  label, addLabel, columns, dataset, getRoleStatus, onRetry,
+  label, addLabel, columns, dataset, getRoleStatus, onRetry, onOpen, onCreate,
 }: RecordsPanelProps<RecordType>) {
   const [query, setQuery] = useState("");
   const [roleStatus, setRoleStatus] = useState<RoleStatusFilter>("all");
@@ -73,12 +84,12 @@ function RecordsPanel<RecordType extends { id: string }>({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2.5 border-y px-4 py-3 sm:px-5">
-        <label className="relative min-w-0 grow basis-40 sm:max-w-72">
+        <label className="relative min-w-0 grow basis-40 @lg/workspace:max-w-72">
           <span className="sr-only">Filter {label}</span>
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            className="h-9 border-border bg-background pl-9"
+            className="bg-background pl-9"
             placeholder={`Filter ${label}…`}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -88,7 +99,7 @@ function RecordsPanel<RecordType extends { id: string }>({
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               aria-label={`Role status: ${statusLabel}`}
-              render={<Button variant="outline" size="lg" className="min-w-32 justify-between" />}
+              render={<Button variant="outline" className="min-w-32 justify-between" />}
             >
               {statusLabel}
               <ChevronDown aria-hidden="true" className="text-muted-foreground" />
@@ -104,12 +115,19 @@ function RecordsPanel<RecordType extends { id: string }>({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <UnavailableAction
-          render={<Button variant="outline" size="lg" className="ml-auto cursor-not-allowed opacity-60" />}
-        >
-          <Plus aria-hidden="true" />
-          {addLabel}
-        </UnavailableAction>
+        {onCreate ? (
+          <Button variant="outline" aria-haspopup="dialog" onClick={(event) => onCreate(event.currentTarget)}>
+            <Plus aria-hidden="true" />
+            {addLabel}
+          </Button>
+        ) : (
+          <UnavailableAction
+            render={<Button variant="outline" className="cursor-not-allowed opacity-60" />}
+          >
+            <Plus aria-hidden="true" />
+            {addLabel}
+          </UnavailableAction>
+        )}
       </div>
 
       <Table aria-label={label.charAt(0).toUpperCase() + label.slice(1)} className="min-w-max">
@@ -124,17 +142,31 @@ function RecordsPanel<RecordType extends { id: string }>({
         </TableHeader>
         <TableBody>
           {filteredRows.map(({ record, cells }) => (
-            <TableRow key={record.id} aria-description="Details coming soon" className="hover:cursor-pointer hover:bg-accent/40">
+            <TableRow
+              key={record.id}
+              className={cn(onOpen && "cursor-pointer hover:bg-accent/50")}
+              onClick={onOpen ? (event) => {
+                // The title button also provides native Enter/Space activation.
+                const trigger = event.currentTarget.querySelector<HTMLButtonElement>("[data-record-trigger]");
+                if (trigger) onOpen(record, trigger);
+              } : undefined}
+            >
               {cells.map(({ heading, value }, index) => (
                 <TableCell
                   key={heading}
                   className="max-w-56 px-4 py-3 wrap-anywhere whitespace-normal first:font-medium sm:px-5"
                 >
-                  {index === 0 ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="min-w-0">{value ?? "—"}</span>
-                      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground md:hidden md:pointer-coarse:block" />
-                    </span>
+                  {index === 0 && onOpen ? (
+                    <button
+                      id={`tracker-${label}-${record.id}`}
+                      data-record-trigger
+                      type="button"
+                      aria-haspopup="dialog"
+                      aria-label={`View ${value}`}
+                      className="touch-target cursor-pointer rounded-sm text-left underline decoration-transparent underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-ring"
+                    >
+                      {value ?? "—"}
+                    </button>
                   ) : (value ?? "—")}
                 </TableCell>
               ))}
@@ -144,15 +176,12 @@ function RecordsPanel<RecordType extends { id: string }>({
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columns.length} className="h-24 px-4 whitespace-normal sm:px-5">
                 <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-                  {dataset.status === "loading" && <p role="status">Loading {label}…</p>}
+                  {dataset.status === "loading" && <LoadingState message={`Loading ${label}…`} />}
                   {dataset.status === "error" && (
-                    <>
-                      <p role="alert">{dataset.error}</p>
-                      <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
-                    </>
+                    <LoadError message={dataset.error} onRetry={onRetry} />
                   )}
                   {dataset.status === "ready" && (
-                    <p>{rows.length ? "No records match your filters." : `No ${label} yet.`}</p>
+                    <EmptyState message={rows.length ? "No records match your filters." : `No ${label} yet.`} />
                   )}
                 </div>
               </TableCell>
@@ -173,22 +202,65 @@ function RecordsPanel<RecordType extends { id: string }>({
 type DashboardRecordsProps = Pick<ReturnType<typeof useDashboardRecords>, "roles" | "companies" | "contacts" | "retry">;
 
 export function DashboardRecords({ roles, companies, contacts, retry }: DashboardRecordsProps) {
+  const { user, request } = useAuth();
+  const [roleEditor, setRoleEditor] = useState<RoleEditor | null>(null);
+  const selectedRole = roleEditor && roleEditor.mode !== "create" ? roleEditor.role : null;
+  const tracker = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const companyNames = new Map(companies.records.map((company) => [company.id, company.name]));
+
+  function openRole(role: DashboardRole, trigger: HTMLButtonElement) {
+    opener.current = trigger;
+    setRoleEditor({ mode: "view", role });
+  }
+
+  function createRole(trigger: HTMLButtonElement) {
+    opener.current = trigger;
+    setRoleEditor({ mode: "create" });
+  }
+
+  function refreshRoleData() {
+    retry("roles");
+    retry("upcomingEvents");
+  }
+
+  function handleRoleSaved(role: DashboardRole) {
+    setRoleEditor({ mode: "view", role });
+    refreshRoleData();
+  }
+
+  async function handleRoleDeleted(id: string) {
+    await deleteRole(request, id);
+    // The deleted row disappears during refresh; the filter remains mounted.
+    opener.current = tracker.current?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+    setRoleEditor(null);
+    refreshRoleData();
+  }
+
+  function restoreRoleFocus() {
+    if (opener.current?.isConnected) return opener.current;
+    // A refresh replaces the row; deletion or a changed filter can remove it.
+    return document.getElementById(`tracker-roles-${selectedRole?.id}`)
+      ?? tracker.current?.querySelector<HTMLInputElement>('input[type="search"]')
+      ?? null;
+  }
 
   function companyName(companyId: string | null) {
     // The link is set, but that company is not in the list that loaded.
     return companyId === null ? null : companyNames.get(companyId) ?? "Unavailable";
   }
 
+  if (!user) return null;
+
   return (
-    <Card className="gap-3">
+    <Card ref={tracker} className="gap-3">
       <CardHeader className="px-4 sm:px-5">
         <CardTitle><h2 className="text-lg font-semibold">Tracker</h2></CardTitle>
         <CardDescription>Browse and filter the records in your job search.</CardDescription>
       </CardHeader>
       {/* Panels stay mounted so filter text and the status choice survive a tab change. */}
       <Tabs defaultValue="roles" className="gap-3">
-        <TabsList aria-label="Tracker records" className="mx-4 h-9! sm:mx-5">
+        <TabsList aria-label="Tracker records" className="mx-4 sm:mx-5">
           <TabsTrigger value="roles" className="px-3">Roles</TabsTrigger>
           <TabsTrigger value="companies" className="px-3">Companies</TabsTrigger>
           <TabsTrigger value="contacts" className="px-3">Contacts</TabsTrigger>
@@ -211,6 +283,8 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
             dataset={roles}
             getRoleStatus={(role) => role.status}
             onRetry={() => retry("roles")}
+            onOpen={openRole}
+            onCreate={createRole}
           />
         </TabsContent>
         <TabsContent value="companies" keepMounted>
@@ -242,6 +316,19 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
           />
         </TabsContent>
       </Tabs>
+      {roleEditor && (
+        <Suspense fallback={<div className="px-4"><LoadingState message="Loading role details…" /></div>}>
+          <RoleDialog
+            editor={roleEditor}
+            companyName={selectedRole?.company_id ? companyNames.get(selectedRole.company_id) : undefined}
+            onClose={() => setRoleEditor(null)}
+            onSave={(change) => saveRole(request, user.id, change)}
+            onSaved={handleRoleSaved}
+            onDelete={handleRoleDeleted}
+            restoreFocus={restoreRoleFocus}
+          />
+        </Suspense>
+      )}
     </Card>
   );
 }

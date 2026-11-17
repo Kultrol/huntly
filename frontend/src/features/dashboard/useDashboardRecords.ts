@@ -2,27 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { getErrorMessage } from "@/api/client";
 import type { AuthContextValue } from "@/features/auth/session/AuthContext";
 import { useAuth } from "@/features/auth/session/useAuth";
+import type { RoleStatus, TrackedRole } from "@/features/roles/types";
 
-export type DashboardRoleStatus =
-  | "saved"
-  | "applied"
-  | "screening"
-  | "interview"
-  | "offer"
-  | "rejected"
-  | "accepted"
-  | "withdrawn";
-
-export type DashboardRole = {
-  id: string;
-  user_id: string;
-  title: string;
-  company_id: string | null;
-  location: string | null;
-  role_type: string | null;
-  status: DashboardRoleStatus;
-  applied_at: string | null;
-};
+export type DashboardRoleStatus = RoleStatus;
+export type DashboardRole = TrackedRole;
 
 export type DashboardCompany = {
   id: string;

@@ -1,5 +1,5 @@
 import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { UnavailableAction } from "@/features/dashboard/UnavailableAction";
+import { UnavailableAction } from "@/components/feedback/UnavailableAction";
 import { type LucideIcon } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
 

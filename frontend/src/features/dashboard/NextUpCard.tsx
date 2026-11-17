@@ -1,5 +1,5 @@
-import { CalendarDays, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarDays } from "lucide-react";
+import { EmptyState, LoadError, LoadingState } from "@/components/feedback/LoadState";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DashboardDataset, DashboardEvent, DashboardRole } from "./useDashboardRecords";
 
@@ -32,21 +32,18 @@ export function NextUpCard({ events, roles, onRetry }: NextUpCardProps) {
             <CalendarDays aria-hidden="true" className="size-5" />
           </span>
           <div>
-            <CardTitle><h2 id="next-up-heading" className="text-lg font-semibold">Next up</h2></CardTitle>
+            <CardTitle><h2 id="next-up-heading" className="section-title">Next up</h2></CardTitle>
             <CardDescription>Upcoming interviews, deadlines, and follow-ups.</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
-          {events.status === "loading" && <p role="status" className="text-muted-foreground">Loading upcoming events…</p>}
+          {events.status === "loading" && <LoadingState message="Loading upcoming events…" />}
           {events.status === "error" && (
-            <div className="flex flex-wrap items-center gap-2">
-              <p role="alert" className="text-muted-foreground">{events.error}</p>
-              <Button variant="outline" size="sm" onClick={onRetry}>Retry upcoming events</Button>
-            </div>
+            <LoadError message={events.error} onRetry={onRetry} retryLabel="Retry upcoming events" />
           )}
           {events.status === "ready" && (
             events.records.length === 0 ? (
-              <p className="border-t pt-3 text-muted-foreground">Nothing scheduled for today or later.</p>
+              <EmptyState message="Nothing scheduled for today or later." />
             ) : (
               <ul role="list" className="divide-y border-t">
                 {events.records.map((event) => {
@@ -58,7 +55,7 @@ export function NextUpCard({ events, roles, onRetry }: NextUpCardProps) {
                   return (
                     <li
                       key={event.id}
-                      className="flex items-center gap-2 px-2 py-2.5 text-left transition-colors hover:cursor-pointer hover:bg-accent/40 sm:gap-3"
+                      className="flex flex-wrap items-center gap-3 py-3 text-left"
                     >
                       <div className="min-w-0 flex-1 wrap-anywhere">
                         <p className="font-medium">{event.title}</p>
@@ -70,7 +67,6 @@ export function NextUpCard({ events, roles, onRetry }: NextUpCardProps) {
                         <span className="block">{dateFormat.format(formattedEvent)}</span>
                         {time && <span className="mt-0.5 block">{timeFormat.format(formattedEvent)}</span>}
                       </time>
-                      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground md:hidden" />
                     </li>
                   );
                 })}
