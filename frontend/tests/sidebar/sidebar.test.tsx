@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import AppRoutes from "@/app/AppRoutes";
 import AuthProvider from "@/features/auth/session/AuthProvider";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -105,4 +105,39 @@ it("moves between the dashboard and roles from the workspace navigation", async 
   fireEvent.click(workspaceNav().getByRole("link", { name: "Dashboard" }));
   expect(await screen.findByRole("heading", { name: "Welcome Kevin" })).not.toBeNull();
   expect(screen.getByTestId("current-location").textContent).toBe("/dashboard");
+});
+
+it("closes the mobile navigation on selection and restores focus on dismissal", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => Object.assign(new EventTarget(), {
+    matches: query === "(width < 48rem)", media: query,
+  }));
+  renderSignedInApp();
+  await screen.findByRole("heading", { name: "Welcome Kevin" });
+  const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const drawer = within(await screen.findByRole("dialog", { name: "Sidebar" }));
+  fireEvent.click(drawer.getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+
+  fireEvent.click(trigger);
+  fireEvent.click(within(await screen.findByRole("dialog", { name: "Sidebar" })).getByRole("link", { name: "Roles" }));
+  await waitFor(() => expect(screen.getByTestId("current-location").textContent).toBe("/roles"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("button", { name: "Toggle Sidebar" }).getAttribute("aria-expanded")).toBe("false");
+});
+
+it("makes collapsed desktop navigation inert while the page stays usable", async () => {
+  renderSignedInApp();
+  await screen.findByRole("heading", { name: "Welcome Kevin" });
+  const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+  const sidebar = document.querySelector('[data-slot="sidebar-container"]')!;
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  expect(sidebar.hasAttribute("inert")).toBe(true);
+  expect(screen.getByRole("region", { name: "Overview" })).toBeDefined();
+  fireEvent.click(trigger);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(sidebar.hasAttribute("inert")).toBe(false);
 });

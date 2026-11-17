@@ -46,7 +46,7 @@ export default function HomePage() {
             </span>
           )}
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="page-title">
               {status === "ready"
                 ? "Welcome to Huntly"
                 : status === "error"
@@ -76,7 +76,7 @@ export default function HomePage() {
         )}
 
         {status === "error" && (
-          <Button onClick={retry} className="h-11 w-full">
+          <Button onClick={retry} size="lg" className="w-full">
             <RefreshCw aria-hidden="true" />
             Try again
           </Button>
@@ -84,11 +84,11 @@ export default function HomePage() {
 
         {status === "ready" && (
           <nav aria-label="Get started" className="grid gap-3">
-            <Link to="/login" className={buttonVariants({ className: "h-11 w-full" })}>
+            <Link to="/login" className={buttonVariants({ size: "lg", className: "w-full" })}>
               Sign in
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
-            <Link to="/register" className={buttonVariants({ variant: "outline", className: "h-11 w-full" })}>
+            <Link to="/register" className={buttonVariants({ variant: "outline", size: "lg", className: "w-full" })}>
               Create an account
             </Link>
           </nav>

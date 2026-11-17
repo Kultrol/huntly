@@ -7,8 +7,8 @@ interface PageHeaderProps {
 
 export default function PageHeader({ pageName }: PageHeaderProps) {
   return (
-    <header className="flex h-14 items-center gap-3 border-b bg-card/70 px-4 md:px-6">
-      <SidebarTrigger className="size-8" />
+    <header className="page-gutters flex min-h-14 items-center gap-3 border-b bg-card/70">
+      <SidebarTrigger />
       <span className="h-4 border-l" aria-hidden="true" />
       <span className="text-sm font-medium">{pageName}</span>
       <ThemeToggleButton className="ml-auto" />
