@@ -67,9 +67,9 @@ class EventService:
             raise EventFetchingError("Failed to get events") from exc
 
     async def get_upcoming_events(
-        self, user_id: UUID, from_date: date
+        self, user_id: UUID, from_date: date, *, include_all_types: bool = False
     ) -> list[TrackedRoleEvent]:
-        """Find the next five unresolved dashboard events across an owner's roles."""
+        """Find five upcoming unresolved events, optionally across every event type."""
         stmt = (
             select(TrackedRoleEvent)
             .join(TrackedRoleEvent.tracked_role)
@@ -79,14 +79,6 @@ class EventService:
                 TrackedRoleEvent.status.in_(
                     (EventStatus.PENDING, EventStatus.SCHEDULED)
                 ),
-                TrackedRoleEvent.event_type.in_(
-                    (
-                        EventType.INTERVIEW,
-                        EventType.FOLLOW_UP,
-                        EventType.APPLICATION_DEADLINE,
-                        EventType.OFFER_DEADLINE,
-                    )
-                ),
             )
             .order_by(
                 TrackedRoleEvent.event_date,
@@ -95,6 +87,17 @@ class EventService:
             )
             .limit(5)
         )
+        if not include_all_types:
+            stmt = stmt.where(
+                TrackedRoleEvent.event_type.in_(
+                    (
+                        EventType.INTERVIEW,
+                        EventType.FOLLOW_UP,
+                        EventType.APPLICATION_DEADLINE,
+                        EventType.OFFER_DEADLINE,
+                    )
+                )
+            )
         try:
             return list(await self.db.scalars(stmt))
         except SQLAlchemyError as exc:

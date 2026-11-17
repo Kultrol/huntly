@@ -55,12 +55,13 @@ async def get_upcoming_events(
     from_date: date,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    include_all_types: bool = False,
 ) -> UpcomingEventsRead:
-    """List the signed-in user's next five interviews, deadlines, and follow-ups."""
+    """List five upcoming events, with all categories available to the Roles page."""
     async with db.begin():
         try:
             events = await EventService(db).get_upcoming_events(
-                current_user.id, from_date
+                current_user.id, from_date, include_all_types=include_all_types
             )
         except EventServiceError as exc:
             raise HTTPException(
