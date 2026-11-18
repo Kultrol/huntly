@@ -429,14 +429,14 @@ it("explains unavailable actions without changing the dashboard location", async
   renderDashboard();
   await screen.findByRole("heading", { name: "Welcome Kevin" });
   const unavailableMessage = "This feature isn't implemented just yet.";
-  fireEvent.click(screen.getByRole("tab", { name: "Companies" }));
-  const addCompany = screen.getByRole("button", { name: "Add company" });
+  fireEvent.click(screen.getByRole("tab", { name: "Contacts" }));
+  const addContact = screen.getByRole("button", { name: "Add contact" });
 
-  expect(addCompany.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(addCompany);
+  expect(addContact.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(addContact);
   expect(await screen.findByText(unavailableMessage)).not.toBeNull();
   expect(screen.getByTestId("dashboard-location").textContent).toBe("/dashboard");
-  fireEvent.keyDown(addCompany, { key: "Escape" });
+  fireEvent.keyDown(addContact, { key: "Escape" });
   await waitFor(() => expect(screen.queryByText(unavailableMessage)).toBeNull());
   fireEvent.click(screen.getByRole("tab", { name: "Roles" }));
 
@@ -550,7 +550,7 @@ it("filters the signed-in user's tracker tables and switches the theme", async (
   const companies = within(screen.getByRole("tabpanel", { name: "Companies" }));
   await companies.findByRole("row", { name: /Northstar Labs/ });
   expect(companies.getByRole("row", { name: /Meridian Studio/ })).not.toBeNull();
-  expect(screen.getByRole("button", { name: "Add company" }).getAttribute("aria-disabled")).toBe("true");
+  expect(companies.getByRole("button", { name: "Add company" }).getAttribute("aria-haspopup")).toBe("dialog");
 
   fireEvent.change(companies.getByLabelText("Filter companies"), { target: { value: "austin" } });
   expect(companies.queryByRole("row", { name: /Northstar Labs/ })).toBeNull();

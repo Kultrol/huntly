@@ -1,19 +1,12 @@
 import { readOwnedRecords, verifyOwner } from "@/api/ownedRecords";
 import { useDataset } from "@/api/useDataset";
+import { useCompanies } from "@/features/companies/useCompanies";
 export type { Dataset as DashboardDataset } from "@/api/useDataset";
 import { useAuth } from "@/features/auth/session/useAuth";
 import type { RoleStatus, TrackedRole } from "@/features/roles/types";
 
 export type DashboardRoleStatus = RoleStatus;
 export type DashboardRole = TrackedRole;
-
-export type DashboardCompany = {
-  id: string;
-  user_id: string;
-  name: string;
-  location: string | null;
-  website: string | null;
-};
 
 export type DashboardContact = {
   id: string;
@@ -58,7 +51,7 @@ function localCalendarDate() {
 export function useDashboardRecords() {
   const auth = useAuth();
   const [roles, retryRoles] = useDataset<DashboardRole>("/tracked-roles/", auth, readOwnedRecords);
-  const [companies, retryCompanies] = useDataset<DashboardCompany>("/companies/", auth, readOwnedRecords);
+  const [companies, retryCompanies] = useCompanies();
   const [contacts, retryContacts] = useDataset<DashboardContact>("/contacts/", auth, readOwnedRecords);
   const [upcomingEvents, retryUpcomingEvents] = useDataset<DashboardEvent>(
     `/events/upcoming?from_date=${localCalendarDate()}`,

@@ -7,7 +7,7 @@ import type { Company } from "@/features/companies/api";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { jsonResponse, mockApiFetch, signedInSession } from "../auth/fixtures";
 
-it("creates, edits, and deletes companies and keeps a draft after a duplicate name", async () => {
+it("creates from the dashboard, keeps a duplicate-name draft, and edits and deletes from Companies", async () => {
   const first: Company = {
     user_id: signedInSession.user.id, id: "first", name: "Northstar",
     website: null, linkedin_url: null, location: null, notes: null,
@@ -18,6 +18,8 @@ it("creates, edits, and deletes companies and keeps a draft after a duplicate na
     const path = new URL(String(input)).pathname;
     const method = options.method ?? "GET";
     if (path === "/auth/me") return jsonResponse(signedInSession);
+    if (path === "/events/upcoming") return jsonResponse({ user_id: first.user_id, events: [] });
+    if (path === "/tracked-roles/" || path === "/contacts/") return jsonResponse([]);
     if (path === "/companies/" && method === "GET") return jsonResponse(companies);
     expect(new Headers(options.headers).get("X-CSRF-Token")).toBe(signedInSession.csrf_token);
     if (path === "/companies/" && method === "POST") {
@@ -42,7 +44,8 @@ it("creates, edits, and deletes companies and keeps a draft after a duplicate na
     throw new Error(`Unexpected request ${method} ${path}`);
   });
 
-  render(<MemoryRouter initialEntries={["/companies"]}><AuthProvider><AppRoutes /></AuthProvider></MemoryRouter>, { wrapper: ThemeProvider });
+  render(<MemoryRouter initialEntries={["/dashboard"]}><AuthProvider><AppRoutes /></AuthProvider></MemoryRouter>, { wrapper: ThemeProvider });
+  fireEvent.click(await screen.findByRole("tab", { name: "Companies" }));
   fireEvent.click(await screen.findByRole("button", { name: "View Northstar" }));
   fireEvent.click(within(await screen.findByRole("dialog", { name: "Northstar" })).getByRole("button", { name: "Close" }));
   fireEvent.click(screen.getByRole("button", { name: "Add company" }));
@@ -58,6 +61,7 @@ it("creates, edits, and deletes companies and keeps a draft after a duplicate na
   fireEvent.click(form.getByRole("button", { name: "Add company" }));
   fireEvent.click(within(await screen.findByRole("dialog", { name: "Meridian" })).getByRole("button", { name: "Close" }));
   await screen.findByRole("button", { name: "View Meridian" });
+  fireEvent.click(screen.getByRole("link", { name: "View companies" }));
   const search = await screen.findByRole("searchbox", { name: "Search companies" });
   fireEvent.change(search, { target: { value: "miami" } });
   fireEvent.click(await screen.findByRole("button", { name: "View Meridian" }));
