@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getErrorMessage } from "@/api/client";
 import { useAuth } from "@/features/auth/session/useAuth";
-import { deleteRole, listRoleCompanies, listRoles, saveRole } from "./api";
+import { deleteRole, listRoles, saveRole } from "./api";
 import type { RoleChange, TrackedRole } from "./types";
 
 type RolesLoad =
@@ -12,7 +12,6 @@ type RolesLoad =
 export function useRoles(userId: string) {
   const { request } = useAuth();
   const [load, setLoad] = useState<RolesLoad>({ status: "loading" });
-  const [companies, setCompanies] = useState<ReadonlyMap<string, string>>(new Map());
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -28,18 +27,7 @@ export function useRoles(userId: string) {
       }
     }
 
-    async function loadCompanyNames() {
-      try {
-        const names = await listRoleCompanies(request, userId, signal);
-        if (!signal.aborted) setCompanies(names);
-      } catch {
-        // Roles are still usable if company names are temporarily unavailable.
-        if (!signal.aborted) setCompanies(new Map());
-      }
-    }
-
     void loadRoles();
-    void loadCompanyNames();
     return () => controller.abort();
   }, [request, userId, attempt]);
 
@@ -67,5 +55,5 @@ export function useRoles(userId: string) {
       : current);
   }
 
-  return { load, companies, retry, save, remove };
+  return { load, retry, save, remove };
 }

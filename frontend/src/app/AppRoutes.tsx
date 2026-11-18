@@ -3,6 +3,7 @@ import { GuestOnly, RequireAuth } from "@/features/auth/AuthRouteGuards";
 import { AuthLayout } from "@/features/auth/components/AuthLayout";
 import LoginPage from "@/features/auth/pages/LoginPage";
 import RegisterPage from "@/features/auth/pages/RegisterPage";
+import CompaniesPage from "./pages/CompaniesPage";
 import DashboardPage from "./pages/DashboardPage";
 import HomePage from "./pages/HomePage";
 import RolesPage from "./pages/RolesPage";
@@ -21,6 +22,7 @@ export default function AppRoutes() {
       </Route>
       <Route element={<RequireAuth />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/companies" element={<CompaniesPage />} />
         <Route path="/roles" element={<RolesPage />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />

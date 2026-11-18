@@ -60,9 +60,8 @@ it("marks the dashboard as the current workspace page", async () => {
   expect(dashboard.closest("[aria-current='page']")).not.toBeNull();
   expect(dashboard.closest("a")).toBeNull();
   expect(workspace.getByRole("link", { name: "Roles" }).getAttribute("href")).toBe("/roles");
-  for (const label of ["Companies", "Contacts"]) {
-    expect(workspace.getByRole("button", { name: label }).getAttribute("aria-disabled")).toBe("true");
-  }
+  expect(workspace.getByRole("link", { name: "Companies" }).getAttribute("href")).toBe("/companies");
+  expect(workspace.getByRole("button", { name: "Contacts" }).getAttribute("aria-disabled")).toBe("true");
 });
 
 it("explains unavailable sidebar actions without leaving the dashboard", async () => {
@@ -97,9 +96,8 @@ it("moves between the dashboard and roles from the workspace navigation", async 
   expect(roles.closest("[aria-current='page']")).not.toBeNull();
   expect(roles.closest("a")).toBeNull();
   expect(workspaceNav().getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/dashboard");
-  for (const label of ["Companies", "Contacts"]) {
-    expect(workspaceNav().getByRole("button", { name: label }).getAttribute("aria-disabled")).toBe("true");
-  }
+  expect(workspaceNav().getByRole("link", { name: "Companies" }).getAttribute("href")).toBe("/companies");
+  expect(workspaceNav().getByRole("button", { name: "Contacts" }).getAttribute("aria-disabled")).toBe("true");
   expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-disabled")).toBe("true");
 
   fireEvent.click(workspaceNav().getByRole("link", { name: "Dashboard" }));

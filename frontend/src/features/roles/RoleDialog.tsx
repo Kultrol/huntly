@@ -3,6 +3,8 @@ import { getErrorMessage } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { FormDialog } from "@/components/forms/FormDialog";
 import { FormActions } from "@/components/forms/FormActions";
+import type { Company } from "@/features/companies/api";
+import type { Dataset } from "@/api/useDataset";
 import { RoleForm } from "./RoleForm";
 import { RoleDetails } from "./RoleDetails";
 import type { RoleChange, TrackedRole } from "./types";
@@ -11,7 +13,8 @@ export type RoleEditor = { mode: "create" } | { mode: "view" | "edit" | "delete"
 
 type RoleDialogProps = {
   editor: RoleEditor;
-  companyName?: string;
+  companies: Dataset<Company>;
+  reloadCompanies: () => void;
   onClose: () => void;
   onSave: (change: RoleChange) => Promise<TrackedRole>;
   onSaved: (role: TrackedRole) => void;
@@ -22,7 +25,7 @@ type RoleDialogProps = {
 const titles = { view: "Role details", create: "Add role", edit: "Edit role", delete: "Delete role?" };
 
 export function RoleDialog({
-  editor, companyName, onClose, onSave, onSaved, onDelete, restoreFocus,
+  editor, companies, reloadCompanies, onClose, onSave, onSaved, onDelete, restoreFocus,
 }: RoleDialogProps) {
   const [pending, setPending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -87,7 +90,7 @@ export function RoleDialog({
       {mode === "view" && role ? (
         <div className="dialog-form">
           <div className="form-body">
-            <RoleDetails role={role} companyName={companyName} />
+            <RoleDetails role={role} companyName={companies.records.find((company) => company.id === role.company_id)?.name} />
           </div>
           <FormActions>
             <Button variant="ghost" onClick={() => setPreviewMode("delete")}>Delete role</Button>
@@ -106,7 +109,8 @@ export function RoleDialog({
       ) : (
         <RoleForm
           role={role}
-          companyName={companyName}
+          companies={companies}
+          reloadCompanies={reloadCompanies}
           isSaving={pending}
           onSave={save}
           onCancel={cancelAction}
