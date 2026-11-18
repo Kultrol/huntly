@@ -27,6 +27,7 @@ const role: TrackedRole = {
 };
 
 let records: TrackedRole[];
+let companies: { id: string; name: string; user_id: string }[];
 const post = vi.fn<(options: RequestInit) => Response | Promise<Response>>();
 const patch = vi.fn<(options: RequestInit) => Response>();
 const remove = vi.fn<() => Response>();
@@ -34,8 +35,9 @@ const list = vi.fn<() => Response>();
 
 beforeEach(() => {
   records = [role];
+  companies = [{ id: "company-1", user_id: role.user_id, name: "Northstar Labs" }];
   list.mockImplementation(() => jsonResponse(records));
-  post.mockImplementation((options) => jsonResponse({ ...role, id: "new-role", ...JSON.parse(String(options.body)), company_id: null }, 201));
+  post.mockImplementation((options) => jsonResponse({ ...role, id: "new-role", company_id: null, ...JSON.parse(String(options.body)) }, 201));
   patch.mockImplementation((options) => jsonResponse({ ...role, ...JSON.parse(String(options.body)) }));
   remove.mockImplementation(() => new Response(null, { status: 204 }));
   mockApiFetch().mockImplementation(async (input, options = {}) => {
@@ -45,7 +47,12 @@ beforeEach(() => {
     if (path === "/events/upcoming") return jsonResponse({ user_id: role.user_id, events: [] });
     if (path === "/events/") return jsonResponse([]);
     if (path === "/companies/" && method === "GET") {
-      return jsonResponse([{ id: "company-1", user_id: role.user_id, name: "Northstar Labs" }]);
+      return jsonResponse(companies);
+    }
+    if (path === "/companies/" && method === "POST") {
+      const saved = { id: "company-2", user_id: role.user_id, ...JSON.parse(String(options.body)) };
+      companies.push(saved);
+      return jsonResponse(saved, 201);
     }
     if (path === "/tracked-roles/" && method === "GET") return list();
     if (path === "/tracked-roles/" && method === "POST") return post(options);
@@ -113,10 +120,7 @@ it("creates a role with validated fields, omits company_id, and retains a draft 
   await screen.findByText("No roles yet. Add a role to start tracking it.");
   fireEvent.click(screen.getByRole("button", { name: "Add role" }));
   const panel = within(await screen.findByRole("dialog", { name: "Add role" }));
-  const company = panel.getByRole("button", { name: "Company" });
-  expect(company.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(company);
-  expect(await screen.findByText("Feature not implemented yet")).toBeDefined();
+  expect(panel.getByRole("combobox", { name: "Company" }).textContent).toContain("Unassigned");
 
   const title = panel.getByRole<HTMLInputElement>("textbox", { name: "Role title (required)" });
   fireEvent.change(title, { target: { value: "  Frontend Developer  " } });
@@ -133,10 +137,6 @@ it("creates a role with validated fields, omits company_id, and retains a draft 
   fireEvent.change(panel.getByRole("textbox", { name: "Currency" }), { target: { value: "USD" } });
 
   const form = title.form!;
-  const injected = document.createElement("input");
-  injected.name = "company_id";
-  injected.value = "company-1";
-  form.append(injected);
   fireEvent.submit(form);
   expect(panel.getByRole("alert").textContent).toBe("Minimum salary cannot exceed maximum salary.");
   expect(post).not.toHaveBeenCalled();
@@ -167,6 +167,38 @@ it("creates a role with validated fields, omits company_id, and retains a draft 
   fireEvent.submit(form);
   await screen.findByRole("region", { name: "Frontend Developer details" });
   expect(post).toHaveBeenCalledTimes(2);
+});
+
+it("adds a company inline and submits the role draft with that company selected", async () => {
+  renderRoles();
+  fireEvent.click(await screen.findByRole("button", { name: "Add role" }));
+  const form = within(await screen.findByRole("dialog", { name: "Add role" }));
+  const title = form.getByLabelText<HTMLInputElement>("Role title (required)");
+  fireEvent.change(title, { target: { value: "Data Analyst" } });
+  await choose(form.getByRole("combobox", { name: "Status (required)" }), "Applied");
+  fireEvent.click(form.getByRole("button", { name: "New company" }));
+  const companyForm = within(await screen.findByRole("dialog", { name: "Add company" }));
+  fireEvent.change(companyForm.getByLabelText("Company name (required)"), { target: { value: "Meridian" } });
+  fireEvent.click(companyForm.getByRole("button", { name: "Add company" }));
+  await waitFor(() => expect(form.getByRole("combobox", { name: "Company" }).textContent).toContain("Meridian"));
+  expect(title.value).toBe("Data Analyst");
+  expect(post).not.toHaveBeenCalled();
+  fireEvent.click(form.getByRole("button", { name: "Add role" }));
+  await screen.findByRole("region", { name: "Data Analyst details" });
+  expect(JSON.parse(String(post.mock.calls[0][0].body))).toMatchObject({
+    title: "Data Analyst", status: "applied", company_id: "company-2",
+  });
+});
+
+it("clears an existing company assignment without changing other role fields", async () => {
+  renderRoles();
+  const details = await openRole();
+  fireEvent.click(details.getByRole("button", { name: "Edit role" }));
+  const edit = within(await screen.findByRole("dialog", { name: "Edit role" }));
+  await choose(edit.getByRole("combobox", { name: "Company" }), "Unassigned");
+  fireEvent.click(edit.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+  expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ company_id: null });
 });
 
 it("edits a role from its details and sends only fields changed by the user", async () => {

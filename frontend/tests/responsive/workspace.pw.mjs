@@ -20,6 +20,7 @@ const event = {
 
 async function fixtures(page, { empty = false, failList = false, failSave = false } = {}) {
   const roles = empty ? [] : [role];
+  const companies = [];
   const events = empty ? [] : [event];
   let failedLists = 0;
   // Match only the app's /api prefix. A glob of **/api/** also catches Vite
@@ -29,7 +30,17 @@ async function fixtures(page, { empty = false, failList = false, failSave = fals
     const method = route.request().method();
     const reply = (body, status = 200) => route.fulfill({ status, json: body });
     if (path === "/auth/me") return reply({ user, csrf_token: "responsive-csrf" });
-    if (path === "/companies/" || path === "/contacts/") return reply([]);
+    if (path === "/contacts/") return reply([]);
+    if (path === "/companies/" && method === "GET") return reply(companies);
+    if (path === "/companies/" && method === "POST") {
+      const company = {
+        user_id: user.id, id: `company-${companies.length + 1}`,
+        website: null, linkedin_url: null, location: null, notes: null,
+        ...route.request().postDataJSON(),
+      };
+      companies.push(company);
+      return reply(company, 201);
+    }
     if (path === "/events/upcoming") return reply({ user_id: user.id, events });
     if (path === "/events/") return reply(events);
     if (path === "/tracked-roles/" && method === "GET") {
@@ -158,10 +169,8 @@ test("mobile navigation, keyboard focus, touch targets, and failed saves", async
   await dialog.getByRole("textbox", { name: "Role title (required)" }).fill("Saved draft");
   await dialog.getByRole("combobox", { name: "Status (required)" }).click();
   await page.getByRole("option", { name: "Applied", exact: true }).click();
-  // aria-disabled keeps the tooltip reachable; Playwright's normal click skips it.
-  await dialog.getByRole("button", { name: "Company", exact: true }).click({ force: true });
-  await expect(page.getByRole("tooltip")).toContainText("Feature not implemented yet");
-  await page.keyboard.press("Escape");
+  await dialog.getByRole("combobox", { name: "Company", exact: true }).click();
+  await page.getByRole("option", { name: "Unassigned", exact: true }).click();
   await dialog.getByRole("button", { name: "Add role", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
   await expect(dialog.getByRole("textbox", { name: "Role title (required)" })).toHaveValue("Saved draft");
@@ -185,5 +194,35 @@ test("empty, retry, dark mode, and reduced motion", async ({ page }, testInfo) =
   await expect(page.getByText("No roles yet. Add a role to start tracking it.")).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.screenshot({ path: testInfo.outputPath("roles-empty-dark-320.png"), fullPage: true });
+  await noPageOverflow(page);
+});
+
+
+test("keeps a dashboard role draft while creating a company and opens its workspace", async ({ page }, testInfo) => {
+  const touch = testInfo.project.name === "webkit-touch";
+  await page.setViewportSize(touch ? { width: 320, height: 568 } : { width: 3440, height: 1440 });
+  await fixtures(page);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Add role", exact: true }).click();
+  const roleForm = page.getByRole("dialog", { name: "Add role", exact: true });
+  await roleForm.getByLabel("Role title (required)").fill("Analyst");
+  await roleForm.getByRole("combobox", { name: "Status (required)" }).click();
+  await page.getByRole("option", { name: "Saved", exact: true }).click();
+  await roleForm.getByRole("button", { name: "New company" }).click();
+  const companyForm = page.getByRole("dialog", { name: "Add company", exact: true });
+  await companyForm.getByLabel("Company name (required)").fill("Meridian");
+  await companyForm.getByLabel("Location").fill("Miami");
+  await companyForm.getByRole("button", { name: "Add company" }).click();
+  await expect(roleForm.getByLabel("Role title (required)")).toHaveValue("Analyst");
+  await expect(roleForm.getByRole("combobox", { name: "Company", exact: true })).toContainText("Meridian");
+  await roleForm.getByRole("button", { name: "Add role", exact: true }).click();
+  const saved = page.getByRole("dialog", { name: "Analyst" });
+  await expect(saved.getByText("Meridian", { exact: true })).toBeVisible();
+  await saved.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("link", { name: "View companies" }).click();
+  await page.getByRole("searchbox", { name: "Search companies" }).fill("Miami");
+  await page.getByRole("button", { name: "View Meridian" }).click();
+  await expect(page.getByRole("dialog", { name: "Meridian" }).getByText("Miami")).toBeVisible();
+  await dialogFits(page);
   await noPageOverflow(page);
 });

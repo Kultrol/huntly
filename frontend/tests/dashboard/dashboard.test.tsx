@@ -208,7 +208,7 @@ it("creates a role from the dashboard, keeps failed drafts, and refreshes the fi
   const form = within(await screen.findByRole("dialog", { name: "Add role" }));
   const title = form.getByRole<HTMLInputElement>("textbox", { name: "Role title (required)" });
   expect(document.activeElement).toBe(title);
-  expect(form.getByRole("button", { name: "Company" }).getAttribute("aria-disabled")).toBe("true");
+  expect(form.getByRole("combobox", { name: "Company" }).textContent).toContain("Unassigned");
 
   fireEvent.submit(title.form!);
   expect(form.getByRole("alert").textContent).toBe("Enter a role title.");

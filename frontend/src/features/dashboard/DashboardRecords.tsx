@@ -353,7 +353,8 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
         <Suspense fallback={<div className="px-4"><LoadingState message="Loading role details…" /></div>}>
           <RoleDialog
             editor={roleEditor}
-            companyName={selectedRole?.company_id ? companyNames.get(selectedRole.company_id) : undefined}
+            companies={companies}
+            reloadCompanies={() => retry("companies")}
             onClose={() => setRoleEditor(null)}
             onSave={(change) => saveRole(request, user.id, change)}
             onSaved={handleRoleSaved}

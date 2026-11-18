@@ -1,7 +1,7 @@
 import { rolePriorities, roleStatuses, roleTypes } from "./types";
 import type { RoleChange, RoleInput, TrackedRole } from "./types";
 
-type RoleFormValues = { [Field in keyof RoleInput]: string };
+type RoleFormValues = { [Field in keyof Omit<RoleInput, "company_id">]: string };
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
@@ -44,7 +44,7 @@ function readChoice<Choice extends string>(
   return value as Choice;
 }
 
-export function readRoleForm(form: HTMLFormElement, role?: TrackedRole): RoleChange {
+export function readRoleForm(form: HTMLFormElement, role?: TrackedRole, companyId = role?.company_id ?? null): RoleChange {
   const fields = new FormData(form);
   const rawValue = (key: keyof RoleInput) => String(fields.get(key) ?? "");
   const text = (key: keyof RoleInput) => rawValue(key).trim() || null;
@@ -96,11 +96,13 @@ export function readRoleForm(form: HTMLFormElement, role?: TrackedRole): RoleCha
     notes: text("notes"),
   };
 
-  if (!role) return { data };
+  if (!role) return { data: companyId ? { ...data, company_id: companyId } : data };
   const initial = roleFormValues(role);
   const changedFields = Object.entries(data).filter(([key, value]) => {
-    const field = key as keyof RoleInput;
+    const field = key as keyof RoleFormValues;
     return rawValue(field) !== initial[field] && value !== role[field];
   });
-  return { id: role.id, data: Object.fromEntries(changedFields) as Partial<RoleInput> };
+  const patch: Partial<RoleInput> = Object.fromEntries(changedFields);
+  if (companyId !== role.company_id) patch.company_id = companyId;
+  return { id: role.id, data: patch };
 }

@@ -3,6 +3,7 @@ import { PencilIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadError, LoadingState } from "@/components/feedback/LoadState";
+import { useCompanies } from "@/features/companies/useCompanies";
 import { RoleEvents } from "@/features/events/RoleEvents";
 import { UpcomingEventsCard } from "@/features/events/UpcomingEventsCard";
 import { AgingRolesCard } from "./AgingRolesCard";
@@ -13,7 +14,9 @@ import { useRoles } from "./useRoles";
 import type { TrackedRole } from "./types";
 
 export default function RolesWorkspace({ userId }: { userId: string }) {
-  const { load, companies, retry, save, remove } = useRoles(userId);
+  const { load, retry, save, remove } = useRoles(userId);
+  const [companyList, reloadCompanies] = useCompanies();
+  const companies = new Map(companyList.records.map(({ id, name }) => [id, name]));
   const [editor, setEditor] = useState<RoleEditor | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -126,9 +129,8 @@ export default function RolesWorkspace({ userId }: { userId: string }) {
       {editor && (
         <RoleDialog
           editor={editor}
-          companyName={editor.mode !== "create" && editor.role.company_id
-            ? companies.get(editor.role.company_id)
-            : undefined}
+          companies={companyList}
+          reloadCompanies={reloadCompanies}
           onClose={() => setEditor(null)}
           onSave={save}
           onSaved={handleRoleSaved}
