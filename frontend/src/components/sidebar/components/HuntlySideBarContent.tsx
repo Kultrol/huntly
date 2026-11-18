@@ -15,7 +15,7 @@ import {
 import AvailableSideBarItem from "./AvailableSideBarItem";
 import UnavailableSidebarItem from "./UnavailableSideBarItem";
 
-export type WorkspacePageName = "dashboard" | "roles";
+export type WorkspacePageName = "dashboard" | "roles" | "companies";
 
 type WorkspaceNavItem =
   | {
@@ -46,7 +46,7 @@ const pages: WorkspaceNavItem[] = [
     available: true,
     route: "/roles",
   },
-  { label: "Companies", icon: Building2, available: false },
+  { id: "companies", label: "Companies", icon: Building2, available: true, route: "/companies" },
   { label: "Contacts", icon: ContactRound, available: false },
 ];
 
