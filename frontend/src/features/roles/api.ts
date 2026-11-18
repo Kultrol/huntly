@@ -1,15 +1,9 @@
+import { verifyOwner } from "@/api/ownedRecords";
 import type { AuthContextValue } from "@/features/auth/session/AuthContext";
 import type { RoleChange, TrackedRole } from "./types";
 
 type Request = AuthContextValue["request"];
 type CompanySummary = { id: string; name: string; user_id: string };
-
-function verifyOwner(record: { user_id: string }, userId: string) {
-  // A different tab can replace the session cookie before this tab refreshes auth.
-  if (record.user_id !== userId) {
-    throw new Error("Could not verify the account for these records. Try again.");
-  }
-}
 
 export async function listRoles(request: Request, userId: string, signal: AbortSignal) {
   const response = await request("/tracked-roles/", { signal });
