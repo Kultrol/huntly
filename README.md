@@ -13,13 +13,15 @@ If the site has been idle, allow **about a minute** after opening it for the fre
 - Login page for existing accounts
 - Registration page for creating an account
 - Dashboard with upcoming events and an overview of roles, companies, and contacts
+- Dedicated page for roles
+- Forms for adding new roles
 
 ## What's to come
 
 - Email verification for new accounts
 - Stronger password validation, including a special character requirement
-- Dedicated pages for roles, companies, and contacts
-- Forms for adding new roles, companies, and contacts
+- Dedicated pages for companies, and contacts
+- Forms for adding new companies, and contacts
 - A settings page
 
 ## What's here
