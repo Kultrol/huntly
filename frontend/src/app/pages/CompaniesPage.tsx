@@ -9,7 +9,7 @@ export default function CompaniesPage() {
   const { user, csrfToken } = useAuth();
   if (!user) return null;
   return (
-    <WorkspaceLayout page="companies" title="Companies">
+    <WorkspaceLayout page="companies" title="Companies" fitToViewport>
       <Suspense fallback={<LoadingState message="Loading companies…" />}>
         <CompaniesWorkspace key={`${user.id}:${csrfToken}`} />
       </Suspense>

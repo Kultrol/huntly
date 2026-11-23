@@ -53,5 +53,18 @@ export function useDataset<T>(
     : loadingDataset;
   const retry = useCallback(() => setVersion((currentVersion) => currentVersion + 1), []);
 
-  return [dataset, retry] as const;
+  // Apply a confirmed write in place so a mounted list keeps its scroll and focus.
+  function updateRecords(update: (records: T[]) => T[]) {
+    if (dataset.status !== "ready") {
+      retry();
+      return;
+    }
+    setResult((current) => {
+      if (current?.path !== path || current.sessionKey !== sessionKey || current.version !== version
+        || current.dataset.status !== "ready") return current;
+      return { ...current, dataset: { ...current.dataset, records: update(current.dataset.records) } };
+    });
+  }
+
+  return [dataset, retry, updateRecords] as const;
 }

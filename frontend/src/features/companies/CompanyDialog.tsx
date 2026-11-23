@@ -7,7 +7,7 @@ import { useAuth } from "@/features/auth/session/useAuth";
 import { CompanyForm } from "./CompanyForm";
 import { deleteCompany, saveCompany, type Company, type CompanyFields } from "./api";
 
-export type CompanyEditor = { mode: "create" } | { mode: "view"; company: Company };
+export type CompanyEditor = { mode: "create" } | { mode: "view" | "edit" | "delete"; company: Company };
 
 type Props = {
   editor: CompanyEditor;
@@ -22,8 +22,8 @@ export function CompanyDialog({ editor, onClose, onSaved, onDeleted, restoreFocu
   const [action, setAction] = useState<"view" | "edit" | "delete">("view");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const company = editor.mode === "view" ? editor.company : undefined;
-  const mode = company ? action : "create";
+  const company = editor.mode === "create" ? undefined : editor.company;
+  const mode = editor.mode === "view" ? action : editor.mode;
   const title = {
     create: "Add company",
     edit: "Edit company",
@@ -39,7 +39,7 @@ export function CompanyDialog({ editor, onClose, onSaved, onDeleted, restoreFocu
 
   function cancel() {
     setError("");
-    if (company) setAction("view");
+    if (editor.mode === "view") setAction("view");
     else onClose();
   }
 

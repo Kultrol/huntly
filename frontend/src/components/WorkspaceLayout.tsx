@@ -8,14 +8,16 @@ import { TooltipProvider } from "./ui/tooltip";
 import PageContainer from "./PageContainer";
 import PageHeader from "./PageHeader";
 import SessionErrorAlert from "./SessionErrorAlert";
+import { cn } from "@/lib/utils";
 
 type WorkspaceLayoutProps = {
   page: WorkspacePageName;
   title: string;
   children: ReactNode;
+  fitToViewport?: boolean;
 };
 
-export function WorkspaceLayout({ page, title, children }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ page, title, children, fitToViewport = false }: WorkspaceLayoutProps) {
   const { user, signOut, isPending, error: sessionError } = useAuth();
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -37,9 +39,9 @@ export function WorkspaceLayout({ page, title, children }: WorkspaceLayoutProps)
         style={{ "--sidebar-width": "var(--workspace-sidebar-width)" } as CSSProperties}
       >
         <SideBar user={user} onLogout={handleLogout} isLoggingOut={isPending} pageName={page} />
-        <main className="min-w-0 flex-1 bg-background">
+        <main className={cn("min-w-0 flex-1 bg-background", fitToViewport && "flex h-dvh flex-col")}>
           <PageHeader pageName={title} />
-          <PageContainer>
+          <PageContainer fitToViewport={fitToViewport}>
             <SessionErrorAlert sessionError={sessionError} logoutError={logoutError} />
             {children}
           </PageContainer>

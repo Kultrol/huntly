@@ -222,7 +222,9 @@ test("keeps a dashboard role draft while creating a company and opens its worksp
   await page.getByRole("link", { name: "View companies" }).click();
   await page.getByRole("searchbox", { name: "Search companies" }).fill("Miami");
   await page.getByRole("button", { name: "View Meridian" }).click();
-  await expect(page.getByRole("dialog", { name: "Meridian" }).getByText("Miami")).toBeVisible();
-  await dialogFits(page);
+  const details = page.getByRole("complementary", { name: "Company details" });
+  await expect(details.getByText("Miami", { exact: true })).toBeVisible();
+  await expect(details.getByText("Analyst", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await noPageOverflow(page);
 });
