@@ -25,6 +25,7 @@ export type RoleType = keyof typeof roleTypes;
 export type RolePriority = keyof typeof rolePriorities;
 
 export type RoleInput = {
+  company_id?: string | null;
   title: string;
   status: RoleStatus;
   location: string | null;

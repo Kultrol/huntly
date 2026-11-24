@@ -16,10 +16,11 @@ import { EmptyState, LoadError, LoadingState } from "@/components/feedback/LoadS
 import { UnavailableAction } from "@/components/feedback/UnavailableAction";
 import { useAuth } from "@/features/auth/session/useAuth";
 import { deleteRole, saveRole } from "@/features/roles/api";
+import type { CompanyEditor } from "@/features/companies/CompanyDialog";
+import type { Company } from "@/features/companies/api";
 import type { RoleEditor } from "@/features/roles/RoleDialog";
 import { cn } from "@/lib/utils";
 import type {
-  DashboardCompany,
   DashboardContact,
   DashboardDataset,
   DashboardRole,
@@ -29,6 +30,10 @@ import type {
 
 const RoleDialog = lazy(() => import("@/features/roles/RoleDialog").then((module) => ({
   default: module.RoleDialog,
+})));
+
+const CompanyDialog = lazy(() => import("@/features/companies/CompanyDialog").then((module) => ({
+  default: module.CompanyDialog,
 })));
 
 type RoleStatusFilter = DashboardRoleStatus | "all";
@@ -88,6 +93,7 @@ function RecordsPanel<RecordType extends { id: string }>({
           <span className="sr-only">Filter {label}</span>
           <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            id={`tracker-${label}-filter`}
             type="search"
             className="bg-background pl-9"
             placeholder={`Filter ${label}…`}
@@ -200,23 +206,17 @@ function RecordsPanel<RecordType extends { id: string }>({
 }
 
 type DashboardRecordsProps = Pick<ReturnType<typeof useDashboardRecords>, "roles" | "companies" | "contacts" | "retry">;
+type DashboardEditor = ({ kind: "role" } & RoleEditor) | ({ kind: "company" } & CompanyEditor);
 
 export function DashboardRecords({ roles, companies, contacts, retry }: DashboardRecordsProps) {
   const { user, request } = useAuth();
-  const [roleEditor, setRoleEditor] = useState<RoleEditor | null>(null);
-  const selectedRole = roleEditor && roleEditor.mode !== "create" ? roleEditor.role : null;
-  const tracker = useRef<HTMLDivElement>(null);
+  const [editor, setEditor] = useState<DashboardEditor | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const companyNames = new Map(companies.records.map((company) => [company.id, company.name]));
 
-  function openRole(role: DashboardRole, trigger: HTMLButtonElement) {
+  function openEditor(next: DashboardEditor, trigger: HTMLButtonElement) {
     opener.current = trigger;
-    setRoleEditor({ mode: "view", role });
-  }
-
-  function createRole(trigger: HTMLButtonElement) {
-    opener.current = trigger;
-    setRoleEditor({ mode: "create" });
+    setEditor(next);
   }
 
   function refreshRoleData() {
@@ -225,24 +225,24 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
   }
 
   function handleRoleSaved(role: DashboardRole) {
-    setRoleEditor({ mode: "view", role });
+    setEditor({ kind: "role", mode: "view", role });
     refreshRoleData();
   }
 
   async function handleRoleDeleted(id: string) {
     await deleteRole(request, id);
     // The deleted row disappears during refresh; the filter remains mounted.
-    opener.current = tracker.current?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
-    setRoleEditor(null);
+    opener.current = document.getElementById("tracker-roles-filter");
     refreshRoleData();
   }
 
-  function restoreRoleFocus() {
-    if (opener.current?.isConnected) return opener.current;
+  function restoreFocus() {
+    const trigger = opener.current;
+    if (trigger?.isConnected) return trigger;
     // A refresh replaces the row; deletion or a changed filter can remove it.
-    return document.getElementById(`tracker-roles-${selectedRole?.id}`)
-      ?? tracker.current?.querySelector<HTMLInputElement>('input[type="search"]')
-      ?? null;
+    const replacement = trigger?.id ? document.getElementById(trigger.id) : null;
+    const filterId = editor?.kind === "company" ? "tracker-companies-filter" : "tracker-roles-filter";
+    return replacement ?? document.getElementById(filterId);
   }
 
   function companyName(companyId: string | null) {
@@ -253,7 +253,7 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
   if (!user) return null;
 
   return (
-    <Card ref={tracker} className="gap-3">
+    <Card className="gap-3">
       <CardHeader className="px-4 sm:px-5">
         <CardTitle><h2 className="text-lg font-semibold">Tracker</h2></CardTitle>
         <CardDescription>Browse and filter the records in your job search.</CardDescription>
@@ -283,12 +283,12 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
             dataset={roles}
             getRoleStatus={(role) => role.status}
             onRetry={() => retry("roles")}
-            onOpen={openRole}
-            onCreate={createRole}
+            onOpen={(role, trigger) => openEditor({ kind: "role", mode: "view", role }, trigger)}
+            onCreate={(trigger) => openEditor({ kind: "role", mode: "create" }, trigger)}
           />
         </TabsContent>
         <TabsContent value="companies" keepMounted>
-          <RecordsPanel<DashboardCompany>
+          <RecordsPanel<Company>
             label="companies"
             addLabel="Add company"
             columns={[
@@ -298,6 +298,8 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
             ]}
             dataset={companies}
             onRetry={() => retry("companies")}
+            onOpen={(company, trigger) => openEditor({ kind: "company", mode: "view", company }, trigger)}
+            onCreate={(trigger) => openEditor({ kind: "company", mode: "create" }, trigger)}
           />
         </TabsContent>
         <TabsContent value="contacts" keepMounted>
@@ -316,17 +318,36 @@ export function DashboardRecords({ roles, companies, contacts, retry }: Dashboar
           />
         </TabsContent>
       </Tabs>
-      {roleEditor && (
-        <Suspense fallback={<div className="px-4"><LoadingState message="Loading role details…" /></div>}>
-          <RoleDialog
-            editor={roleEditor}
-            companyName={selectedRole?.company_id ? companyNames.get(selectedRole.company_id) : undefined}
-            onClose={() => setRoleEditor(null)}
-            onSave={(change) => saveRole(request, user.id, change)}
-            onSaved={handleRoleSaved}
-            onDelete={handleRoleDeleted}
-            restoreFocus={restoreRoleFocus}
-          />
+      {editor && (
+        <Suspense fallback={<div className="px-4"><LoadingState message={`Loading ${editor.kind} details…`} /></div>}>
+          {editor.kind === "company" ? (
+            <CompanyDialog
+              editor={editor}
+              onClose={() => setEditor(null)}
+              restoreFocus={restoreFocus}
+              onSaved={(company) => {
+                setEditor({ kind: "company", mode: "view", company });
+                retry("companies");
+              }}
+              onDeleted={() => {
+                opener.current = document.getElementById("tracker-companies-filter");
+                retry("companies");
+                retry("roles");
+                retry("contacts");
+              }}
+            />
+          ) : (
+            <RoleDialog
+              editor={editor}
+              companies={companies}
+              reloadCompanies={() => retry("companies")}
+              onClose={() => setEditor(null)}
+              onSave={(change) => saveRole(request, user.id, change)}
+              onSaved={handleRoleSaved}
+              onDelete={handleRoleDeleted}
+              restoreFocus={restoreFocus}
+            />
+          )}
         </Suspense>
       )}
     </Card>

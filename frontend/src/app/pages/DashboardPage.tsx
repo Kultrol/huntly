@@ -167,6 +167,7 @@ export default function DashboardPage() {
             description="Organizations in your tracker"
             icon={Building2}
             dataset={records.companies}
+            to="/companies"
           />
           <OverviewCard
             label="Contacts"

@@ -18,8 +18,7 @@ const event = {
   location: "Video call", url: null,
 };
 
-async function fixtures(page, { empty = false, failList = false, failSave = false } = {}) {
-  const roles = empty ? [] : [role];
+async function fixtures(page, { empty = false, failList = false, failSave = false, companies = [], roles = empty ? [] : [role] } = {}) {
   const events = empty ? [] : [event];
   let failedLists = 0;
   // Match only the app's /api prefix. A glob of **/api/** also catches Vite
@@ -29,7 +28,23 @@ async function fixtures(page, { empty = false, failList = false, failSave = fals
     const method = route.request().method();
     const reply = (body, status = 200) => route.fulfill({ status, json: body });
     if (path === "/auth/me") return reply({ user, csrf_token: "responsive-csrf" });
-    if (path === "/companies/" || path === "/contacts/") return reply([]);
+    if (path === "/contacts/") return reply([]);
+    if (path === "/companies/" && method === "GET") return reply(companies);
+    if (path === "/companies/" && method === "POST") {
+      const company = {
+        user_id: user.id, id: `company-${companies.length + 1}`,
+        website: null, linkedin_url: null, location: null, notes: null,
+        ...route.request().postDataJSON(),
+      };
+      companies.push(company);
+      return reply(company, 201);
+    }
+    if (path.startsWith("/companies/") && method === "PATCH") {
+      const company = companies.find(({ id }) => path === `/companies/${id}`);
+      if (!company) return reply({ detail: "Company not found" }, 404);
+      Object.assign(company, route.request().postDataJSON());
+      return reply(company);
+    }
     if (path === "/events/upcoming") return reply({ user_id: user.id, events });
     if (path === "/events/") return reply(events);
     if (path === "/tracked-roles/" && method === "GET") {
@@ -158,10 +173,8 @@ test("mobile navigation, keyboard focus, touch targets, and failed saves", async
   await dialog.getByRole("textbox", { name: "Role title (required)" }).fill("Saved draft");
   await dialog.getByRole("combobox", { name: "Status (required)" }).click();
   await page.getByRole("option", { name: "Applied", exact: true }).click();
-  // aria-disabled keeps the tooltip reachable; Playwright's normal click skips it.
-  await dialog.getByRole("button", { name: "Company", exact: true }).click({ force: true });
-  await expect(page.getByRole("tooltip")).toContainText("Feature not implemented yet");
-  await page.keyboard.press("Escape");
+  await dialog.getByRole("combobox", { name: "Company", exact: true }).click();
+  await page.getByRole("option", { name: "Unassigned", exact: true }).click();
   await dialog.getByRole("button", { name: "Add role", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
   await expect(dialog.getByRole("textbox", { name: "Role title (required)" })).toHaveValue("Saved draft");
@@ -185,5 +198,116 @@ test("empty, retry, dark mode, and reduced motion", async ({ page }, testInfo) =
   await expect(page.getByText("No roles yet. Add a role to start tracking it.")).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.screenshot({ path: testInfo.outputPath("roles-empty-dark-320.png"), fullPage: true });
+  await noPageOverflow(page);
+});
+
+
+test("keeps a dashboard role draft while creating a company and opens its workspace", async ({ page }, testInfo) => {
+  const touch = testInfo.project.name === "webkit-touch";
+  await page.setViewportSize(touch ? { width: 320, height: 568 } : { width: 3440, height: 1440 });
+  await fixtures(page);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "Add role", exact: true }).click();
+  const roleForm = page.getByRole("dialog", { name: "Add role", exact: true });
+  await roleForm.getByLabel("Role title (required)").fill("Analyst");
+  await roleForm.getByRole("combobox", { name: "Status (required)" }).click();
+  await page.getByRole("option", { name: "Saved", exact: true }).click();
+  await roleForm.getByRole("button", { name: "New company" }).click();
+  const companyForm = page.getByRole("dialog", { name: "Add company", exact: true });
+  await companyForm.getByLabel("Company name (required)").fill("Meridian");
+  await companyForm.getByLabel("Location").fill("Miami");
+  await companyForm.getByRole("button", { name: "Add company" }).click();
+  await expect(roleForm.getByLabel("Role title (required)")).toHaveValue("Analyst");
+  await expect(roleForm.getByRole("combobox", { name: "Company", exact: true })).toContainText("Meridian");
+  await roleForm.getByRole("button", { name: "Add role", exact: true }).click();
+  const saved = page.getByRole("dialog", { name: "Analyst" });
+  await expect(saved.getByText("Meridian", { exact: true })).toBeVisible();
+  await saved.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("link", { name: "View companies" }).click();
+  await page.getByRole("searchbox", { name: "Search companies" }).fill("Miami");
+  await page.getByRole("button", { name: "View Meridian" }).click();
+  const details = page.getByRole("complementary", { name: "Company details" });
+  await expect(details.getByText("Miami", { exact: true })).toBeVisible();
+  await expect(details.getByText("Analyst", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await noPageOverflow(page);
+});
+
+test("company list and details scroll independently and preserve position through edits and mobile Back", async ({ page }) => {
+  const companies = Array.from({ length: 64 }, (_, index) => ({
+    id: `studio-${index}`, user_id: user.id, name: `Studio ${String(index + 1).padStart(2, "0")}`,
+    location: index % 2 ? "Remote" : "Miami", website: null, linkedin_url: null, notes: null,
+  }));
+  const selected = companies[3];
+  const roles = Array.from({ length: 36 }, (_, index) => ({
+    ...role, id: `studio-role-${index}`, company_id: selected.id, title: `Directory engineer ${index + 1}`,
+  }));
+  await fixtures(page, { companies, roles });
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto("/companies");
+  const search = page.getByRole("searchbox", { name: "Search companies" });
+  const list = page.getByRole("region", { name: "Company list" });
+  const details = page.getByRole("complementary", { name: "Company details" });
+
+  async function editNotes(note) {
+    await details.getByRole("button", { name: "Edit company" }).click();
+    const form = page.getByRole("dialog", { name: "Edit company" });
+    await form.getByRole("textbox", { name: "Notes" }).fill(note);
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(form).toBeHidden();
+    await expect(details.getByText(note, { exact: true })).toBeVisible();
+  }
+
+  await list.getByRole("button", { name: `View ${selected.name}`, exact: true }).click();
+  const heading = details.getByRole("heading", { name: selected.name, exact: true });
+  const roleTitles = details.getByText(/^Directory engineer \d+$/);
+  await expect(heading).toBeInViewport();
+  await expect(roleTitles).toHaveCount(roles.length);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  const headingBeforeScroll = await heading.boundingBox();
+  const searchBeforeScroll = await search.boundingBox();
+  const pageBeforeScroll = await page.evaluate(() => window.scrollY);
+  await list.evaluate((node) => { node.scrollTop = node.scrollHeight; });
+  const scrollPosition = await list.evaluate((node) => node.scrollTop);
+  expect(scrollPosition).toBeGreaterThan(0);
+  const lastCompany = companies.at(-1);
+  const lastRow = list.getByRole("button", { name: `View ${lastCompany.name}`, exact: true });
+  await expect(lastRow).toBeInViewport();
+  expect(await heading.boundingBox()).toEqual(headingBeforeScroll);
+  expect(await search.boundingBox()).toEqual(searchBeforeScroll);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageBeforeScroll);
+
+  await expect(roleTitles.last()).not.toBeInViewport();
+  await roleTitles.last().scrollIntoViewIfNeeded();
+  await expect(roleTitles.last()).toBeInViewport();
+  expect(await list.evaluate((node) => node.scrollTop)).toBe(scrollPosition);
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageBeforeScroll);
+  await lastRow.focus();
+  await lastRow.press("Enter");
+  await expect(details.getByRole("heading", { name: lastCompany.name, exact: true })).toBeInViewport();
+  await expect(details.and(page.locator(":focus-within"))).toBeVisible();
+  await editNotes("Discuss hybrid scheduling with the recruiter.");
+  await expect(lastRow).toHaveAttribute("aria-current", "true");
+  expect(await list.evaluate((node) => node.scrollTop)).toBe(scrollPosition);
+  await noPageOverflow(page);
+
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/companies");
+  await search.fill("Remote");
+  const mobileCompany = companies[47];
+  const mobileRow = list.getByRole("button", { name: `View ${mobileCompany.name}`, exact: true });
+  await mobileRow.scrollIntoViewIfNeeded();
+  const mobileScroll = await list.evaluate((node) => node.scrollTop);
+  expect(mobileScroll).toBeGreaterThan(0);
+  await mobileRow.click();
+  await expect(details.getByRole("heading", { name: mobileCompany.name, exact: true })).toBeInViewport();
+  await expect(list).toBeHidden();
+  await editNotes("Follow up after the portfolio review.");
+  await details.getByRole("button", { name: "Back to companies" }).click();
+  await expect(search).toHaveValue("Remote");
+  await expect(mobileRow).toBeFocused();
+  await expect(mobileRow).toBeInViewport();
+  expect(await list.evaluate((node) => node.scrollTop)).toBe(mobileScroll);
   await noPageOverflow(page);
 });

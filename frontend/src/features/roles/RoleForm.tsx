@@ -6,28 +6,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/forms/Field";
 import { FormActions } from "@/components/forms/FormActions";
 import { ChoiceField } from "@/components/ChoiceField";
-import { UnavailableAction } from "@/components/feedback/UnavailableAction";
+import { CompanyPicker } from "@/features/companies/CompanyPicker";
+import type { Company } from "@/features/companies/api";
+import type { Dataset } from "@/api/useDataset";
 import { readRoleForm, roleFormValues } from "./formValues";
 import { rolePriorities, roleStatuses, roleTypes, type RoleChange, type TrackedRole } from "./types";
 
 type RoleFormProps = {
   role?: TrackedRole;
-  companyName?: string;
+  companies: Dataset<Company>;
+  reloadCompanies: () => void;
   isSaving: boolean;
   onSave: (change: RoleChange) => Promise<void>;
   onCancel: () => void;
 };
 
-export function RoleForm({ role, companyName, isSaving, onSave, onCancel }: RoleFormProps) {
+export function RoleForm({ role, companies, reloadCompanies, isSaving, onSave, onCancel }: RoleFormProps) {
   const values = roleFormValues(role);
   const [error, setError] = useState<string | null>(null);
+
+  const [companyId, setCompanyId] = useState(role?.company_id ?? "");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSaving) return;
     setError(null);
     try {
-      await onSave(readRoleForm(event.currentTarget, role));
+      await onSave(readRoleForm(event.currentTarget, role, companyId || null));
     } catch (error) {
       setError(getErrorMessage(error));
     }
@@ -48,22 +53,12 @@ export function RoleForm({ role, companyName, isSaving, onSave, onCancel }: Role
             options={roleStatuses}
             placeholder="Choose a status"
           />
-          <Field label="Company">
-            {(control) => (
-              <UnavailableAction
-                message="Feature not implemented yet"
-                render={
-                  <Button
-                    {...control}
-                    variant="outline"
-                    className="min-w-0 justify-start overflow-hidden font-normal text-muted-foreground"
-                  />
-                }
-              >
-                <span className="truncate">{companyName ?? "Select a company"}</span>
-              </UnavailableAction>
-            )}
-          </Field>
+          <CompanyPicker
+            companies={companies}
+            value={companyId}
+            onChange={setCompanyId}
+            onReload={reloadCompanies}
+          />
           <ChoiceField label="Role type" name="role_type" defaultValue={values.role_type} options={roleTypes} />
           <ChoiceField label="Priority" name="priority" defaultValue={values.priority} options={rolePriorities} />
           <Field label="Location">
