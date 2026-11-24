@@ -32,11 +32,13 @@ const post = vi.fn<(options: RequestInit) => Response | Promise<Response>>();
 const patch = vi.fn<(options: RequestInit) => Response>();
 const remove = vi.fn<() => Response>();
 const list = vi.fn<() => Response>();
+const listCompanies = vi.fn<() => Response>();
 
 beforeEach(() => {
   records = [role];
   companies = [{ id: "company-1", user_id: role.user_id, name: "Northstar Labs" }];
   list.mockImplementation(() => jsonResponse(records));
+  listCompanies.mockImplementation(() => jsonResponse(companies));
   post.mockImplementation((options) => jsonResponse({ ...role, id: "new-role", company_id: null, ...JSON.parse(String(options.body)) }, 201));
   patch.mockImplementation((options) => jsonResponse({ ...role, ...JSON.parse(String(options.body)) }));
   remove.mockImplementation(() => new Response(null, { status: 204 }));
@@ -46,9 +48,7 @@ beforeEach(() => {
     if (path === "/auth/me" && method === "GET") return jsonResponse(signedInSession);
     if (path === "/events/upcoming") return jsonResponse({ user_id: role.user_id, events: [] });
     if (path === "/events/") return jsonResponse([]);
-    if (path === "/companies/" && method === "GET") {
-      return jsonResponse(companies);
-    }
+    if (path === "/companies/" && method === "GET") return listCompanies();
     if (path === "/companies/" && method === "POST") {
       const saved = { id: "company-2", user_id: role.user_id, ...JSON.parse(String(options.body)) };
       companies.push(saved);
@@ -87,8 +87,9 @@ async function openRole() {
   return within(await screen.findByRole("region", { name: `${role.title} details` }));
 }
 
-it("retries a failed list load and keeps the search and filter when closing details", async () => {
+it("retries failed role and company loads and keeps the search and filter when closing details", async () => {
   list.mockReturnValueOnce(jsonResponse({}, 500));
+  listCompanies.mockReturnValueOnce(jsonResponse({}, 500));
   renderRoles();
 
   fireEvent.click(await screen.findByRole("button", { name: "Retry roles" }));
@@ -109,6 +110,25 @@ it("retries a failed list load and keeps the search and filter when closing deta
   await waitFor(() => expect(screen.queryByRole("region", { name: `${role.title} details` })).toBeNull());
   expect(search.value).toBe("Northstar");
   expect(filter.textContent).toContain("Interview");
+});
+
+it("retries company names from the table and restores company search without reloading roles", async () => {
+  listCompanies.mockReturnValueOnce(jsonResponse({}, 500));
+  renderRoles();
+
+  const retry = await screen.findByRole("button", { name: "Retry companies" });
+  expect(screen.getByRole("button", { name: role.title })).toBeDefined();
+  const search = screen.getByRole<HTMLInputElement>("searchbox", { name: "Search roles" });
+  fireEvent.change(search, { target: { value: "Northstar" } });
+  expect(screen.getByText("No roles match your search or filters.")).toBeDefined();
+
+  fireEvent.click(retry);
+  await screen.findByText("Northstar Labs");
+  expect(screen.getByRole("button", { name: role.title })).toBeDefined();
+  expect(search.value).toBe("Northstar");
+  expect(screen.queryByRole("button", { name: "Retry companies" })).toBeNull();
+  expect(list).toHaveBeenCalledTimes(1);
+  expect(listCompanies).toHaveBeenCalledTimes(2);
 });
 
 it("creates a role with validated fields, omits company_id, and retains a draft after a failed save", async () => {

@@ -27,6 +27,11 @@ export default function RolesWorkspace({ userId }: { userId: string }) {
   const workspace = useRef<HTMLDivElement>(null);
   const roles = load.status === "ready" ? load.roles : [];
 
+  function retryRoles() {
+    retry();
+    if (companyList.status === "error") reloadCompanies();
+  }
+
   function openRole(id: string) {
     setSearch("");
     setStatus("");
@@ -76,7 +81,10 @@ export default function RolesWorkspace({ userId }: { userId: string }) {
         )}
       </div>
       {load.status === "loading" && <LoadingState message="Loading roles…" />}
-      {load.status === "error" && <LoadError message={load.message} onRetry={retry} retryLabel="Retry roles" />}
+      {load.status === "error" && <LoadError message={load.message} onRetry={retryRoles} retryLabel="Retry roles" />}
+      {load.status === "ready" && companyList.status === "error" && (
+        <LoadError message={`Could not load company names. ${companyList.error}`} onRetry={reloadCompanies} retryLabel="Retry companies" />
+      )}
       {load.status === "ready" && (
         <RolesTable
           roles={roles}
