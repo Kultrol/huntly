@@ -96,6 +96,36 @@ it("creates from the dashboard, keeps a duplicate-name draft, and edits and dele
   expect(screen.queryByRole("button", { name: "View Meridian Labs" })).toBeNull();
 });
 
+it("preserves stored formatting on unchanged saves and location-only edits", async () => {
+  const company = { ...first, location: "", notes: "  Prepare examples\r\n  Ask about the team.\r\n" };
+  const patches: unknown[] = [];
+  mockApiFetch().mockImplementation(async (input, options = {}) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/auth/me") return jsonResponse(signedInSession);
+    if (path === "/companies/") return jsonResponse([company]);
+    if (path === "/tracked-roles/") return jsonResponse([]);
+    if (path === "/companies/first" && options.method === "PATCH") {
+      const changes = JSON.parse(String(options.body));
+      patches.push(changes);
+      return jsonResponse({ ...company, ...changes });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  });
+  renderPage("/companies");
+
+  fireEvent.click(await screen.findByRole("button", { name: "Edit company" }));
+  fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(patches).toEqual([]);
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit company" }));
+  const edit = within(await screen.findByRole("dialog"));
+  fireEvent.change(edit.getByLabelText("Location"), { target: { value: " Miami " } });
+  fireEvent.click(edit.getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(patches).toEqual([{ location: "Miami" }]);
+});
+
 it("keeps the directory usable when roles fail and shows each company's roles after retry", async () => {
   const second: Company = {
     ...first, id: "second", name: "Meridian", location: "Miami",

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useRef, useState, type FormEvent } from "react";
 import { ApiError, getErrorMessage } from "@/api/client";
 import { Field } from "@/components/forms/Field";
 import { FormActions } from "@/components/forms/FormActions";
@@ -17,6 +17,10 @@ type Props = {
 export function CompanyForm({ company, pending, onSave, onCancel }: Props) {
   const [error, setError] = useState("");
   const [nameError, setNameError] = useState("");
+  const initialValues = useRef<FormData | null>(null);
+  const captureInitialValues = useCallback((form: HTMLFormElement | null) => {
+    if (form) initialValues.current = new FormData(form);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,7 +28,12 @@ export function CompanyForm({ company, pending, onSave, onCancel }: Props) {
     event.stopPropagation();
     if (pending) return;
     const data = new FormData(event.currentTarget);
-    const text = (key: keyof CompanyFields) => String(data.get(key) ?? "").trim();
+    function text(key: keyof CompanyFields) {
+      const raw = data.get(key);
+      // Browsers normalize textarea line endings and display null as an empty input.
+      if (company && raw === initialValues.current?.get(key)) return company[key];
+      return String(raw ?? "").trim() || null;
+    }
     const name = text("name");
     if (!name) {
       setNameError("Enter a company name.");
@@ -35,10 +44,10 @@ export function CompanyForm({ company, pending, onSave, onCancel }: Props) {
     try {
       await onSave({
         name,
-        website: text("website") || null,
-        linkedin_url: text("linkedin_url") || null,
-        location: text("location") || null,
-        notes: text("notes") || null,
+        website: text("website"),
+        linkedin_url: text("linkedin_url"),
+        location: text("location"),
+        notes: text("notes"),
       });
     } catch (cause) {
       // The company API returns 400 for a duplicate normalized name on create or edit.
@@ -48,7 +57,7 @@ export function CompanyForm({ company, pending, onSave, onCancel }: Props) {
   }
 
   return (
-    <form className="dialog-form" onSubmit={submit}>
+    <form ref={captureInitialValues} className="dialog-form" onSubmit={submit}>
       <div className="form-body">
         <fieldset disabled={pending} className="grid min-w-0 gap-4 @lg/form:grid-cols-2">
           <Field label="Company name (required)" error={nameError}>
