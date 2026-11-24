@@ -34,7 +34,11 @@ export default function CompaniesWorkspace() {
   const profile = useRef<HTMLElement>(null);
   const selectedRow = useRef<HTMLButtonElement>(null);
   const term = query.trim().toLowerCase();
-  const filtered = companies.records.filter((company) => matchesSearch(company, term));
+  const orderedCompanies = useMemo(
+    () => companies.records.toSorted((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+    [companies.records],
+  );
+  const filtered = orderedCompanies.filter((company) => matchesSearch(company, term));
   const selected = filtered.find((company) => company.id === selectedId) ?? filtered[0];
   const detailOpen = showDetails && !!selected;
 
@@ -75,13 +79,7 @@ export default function CompaniesWorkspace() {
     setSelectedId(company.id);
     setShowDetails(true);
     setEditor(null);
-    updateCompanies((records) => {
-      if (records.some((record) => record.id === company.id && record.name === company.name)) {
-        return records.map((record) => record.id === company.id ? company : record);
-      }
-      const updated = [...records.filter((record) => record.id !== company.id), company];
-      return updated.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-    });
+    updateCompanies((records) => [...records.filter((record) => record.id !== company.id), company]);
   }
 
   function removeSelected() {

@@ -13,10 +13,15 @@ const first: Company = {
 };
 
 function renderPage(path: string) {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}><AuthProvider><AppRoutes /></AuthProvider></MemoryRouter>,
     { wrapper: ThemeProvider },
   );
+}
+
+function companyRowLabels() {
+  const list = within(screen.getByRole("region", { name: "Company list" }));
+  return list.getAllByRole("button").map((row) => row.getAttribute("aria-label"));
 }
 
 it("creates from the dashboard, keeps a duplicate-name draft, and edits and deletes from Companies", async () => {
@@ -84,6 +89,7 @@ it("creates from the dashboard, keeps a duplicate-name draft, and edits and dele
   fireEvent.click(edit.getByRole("button", { name: "Save changes" }));
   await screen.findByRole("heading", { name: "Meridian Labs" });
   expect(search.value).toBe("");
+  expect(companyRowLabels()).toEqual(["View Meridian Labs", "View Northstar"]);
   expect(patches).toEqual([{ name: "Meridian Labs", location: null }]);
   const details = within(screen.getByRole("complementary", { name: "Company details" }));
   fireEvent.click(details.getByRole("button", { name: "Delete company" }));
@@ -151,6 +157,7 @@ it("keeps the directory usable when roles fail and shows each company's roles af
 
   const northstar = await screen.findByRole("button", { name: "View Northstar" });
   const meridian = screen.getByRole("button", { name: "View Meridian" });
+  fireEvent.click(northstar);
   expect(northstar.getAttribute("aria-current")).toBe("true");
   fireEvent.click(meridian);
   const details = within(screen.getByRole("complementary", { name: "Company details" }));
@@ -188,8 +195,8 @@ it("keeps the directory usable when roles fail and shows each company's roles af
   expect(screen.queryByRole("heading", { name: "Northstar" })).toBeNull();
 });
 
-it("selects a newly created company and preserves a matching search", async () => {
-  const companies = [first];
+it("keeps directory order across creation and reload, preserving a matching search on save", async () => {
+  const companies = [first, { ...first, id: "ridge", name: "North Ridge" }];
   mockApiFetch().mockImplementation(async (input, options = {}) => {
     const path = new URL(String(input)).pathname;
     if (path === "/auth/me") return jsonResponse(signedInSession);
@@ -202,9 +209,10 @@ it("selects a newly created company and preserves a matching search", async () =
     if (path === "/companies/") return jsonResponse(companies);
     throw new Error(`Unexpected request ${path}`);
   });
-  renderPage("/companies");
+  const page = renderPage("/companies");
 
   await screen.findByRole("button", { name: "View Northstar" });
+  expect(companyRowLabels()).toEqual(["View North Ridge", "View Northstar"]);
   const search = screen.getByRole<HTMLInputElement>("searchbox", { name: "Search companies" });
   fireEvent.change(search, { target: { value: "North" } });
   fireEvent.click(screen.getByRole("button", { name: "Add company" }));
@@ -217,4 +225,11 @@ it("selects a newly created company and preserves a matching search", async () =
   expect(screen.getByRole("button", { name: "View North Bay" }).getAttribute("aria-current")).toBe("true");
   expect(search.value).toBe("North");
   expect(screen.getByText("No tracked roles yet.")).toBeDefined();
+  const expectedOrder = ["View North Bay", "View North Ridge", "View Northstar"];
+  expect(companyRowLabels()).toEqual(expectedOrder);
+
+  page.unmount();
+  renderPage("/companies");
+  await screen.findByRole("button", { name: "View North Bay" });
+  expect(companyRowLabels()).toEqual(expectedOrder);
 });
